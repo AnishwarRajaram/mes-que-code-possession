@@ -30,6 +30,10 @@ RANGES = {
     "END_LEAD_S": np.arange(-1.0, 3.01, 0.5),
     "OUT_LINK_S": np.arange(4.0, 16.01, 2.0),
     "OUT_MIN_S": np.arange(2.0, 10.01, 1.0),
+    "OUT_NEAR_M": np.array([0.0, 1.0, 2.0, 3.0, 5.0, 8.0]),
+    "OUT_GAP_S": np.arange(0.5, 6.01, 0.5),
+    "KO_SHARE": np.array([0.75, 0.8, 0.85, 0.9, 0.95, 1.01]),
+    "KO_MIN_S": np.arange(0.5, 5.01, 0.5),
 }
 KEYS = list(RANGES)
 DROPOUT_SEEDS = (0, 1, 2)
@@ -37,6 +41,7 @@ N_SEEDS = 40
 TOP_SEEDS = 4
 STEPS = (-2, -1, 1, 2)
 PLATEAU = 0.01
+CUES_VERSION = 2
 SEED = 0
 
 
@@ -49,19 +54,21 @@ def our_cues():
     players = load.to_metres(atd["players"][:, on, :2])
     n = len(ball)
     segment = (np.arange(n) >= config.half_blocks()[1][1]).astype(np.int8)
-    return deadball.build_cues(ball, players, config.PITCH, config.FPS, segment), \
+    return deadball.build_cues(ball, players, config.PITCH, config.FPS, segment,
+                               (team[on] == load.AWAY).astype(np.int8)), \
         load.graded_mask(n)
 
 
 def idsse_cues(match_id):
-    path = os.path.join(external.ARRAYS_DIR, match_id + "_cues.npz")
+    path = os.path.join(external.ARRAYS_DIR, match_id + "_cues%d.npz" % CUES_VERSION)
     if os.path.exists(path):
         with np.load(path) as z:
             c = {k: z[k] for k in z.files}
         c["fps"] = int(c["fps"])
         return c
     m = external.load(match_id)
-    c = deadball.build_cues(m["ball_xy"], m["players_xy"], tuple(m["pitch"]), 25, m["period"])
+    c = deadball.build_cues(m["ball_xy"], m["players_xy"], tuple(m["pitch"]), 25, m["period"],
+                            m["team"])
     c["dead"] = ~m["alive"]
     np.savez_compressed(path, **c)
     return c

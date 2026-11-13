@@ -19,6 +19,11 @@ is stopped by the referee):
      end pulled back by END_LEAD_S (players speed up just before the restart is taken).
   3. A ball-out joins the players' stop that follows within OUT_LINK_S; a ball-out with no stop
      after it (a quick throw-in) is dead for OUT_MIN_S.
+  4. Inferred ball-out: tracking often loses the ball right at the line. If the ball was last seen
+     within OUT_NEAR_M of a line, moving towards it, and then stays unseen for OUT_GAP_S, it is
+     treated as out from the moment it vanished (then rule 3 applies).
+  5. Kick-off shape (Law 8): every player in their own half (bar the kicker, who straddles the line) and one player at the centre spot. Held
+     for KO_MIN_S, play is dead until the shape breaks.
 """
 
 import numpy as np
@@ -29,8 +34,9 @@ SMOOTH_S = 1.0          # players' speed smoothed over 1 s, the length of a stri
 MAX_PLAYER_SPEED = 12.0  # faster than any sprinter: a tracking jump, not a player
 
 # Calibrated on the seven IDSSE matches with the ball hidden like ours (calibrate.py): best on all
-# seven, every one-step neighbour within 0.01, none at the edge of its range. Nested
-# leave-one-match-out: stoppage F1 0.740 +- 0.018, frame F1 0.855 +- 0.020.
+# seven, all 21 one-step neighbours within 0.01. Nested leave-one-match-out: stoppage F1
+# 0.741 +- 0.022, frame F1 0.854 +- 0.020. Rule 4 (inferred ball-out) was rejected in all seven
+# folds and stays off; rule 5 (kick-off shape) was kept in six of seven.
 PARAMS = {
     "SLOW": 0.95,          # players at or below their usual pace ...
     "RESUME": 1.15,        # ... and staying under 1.15x it ...
@@ -39,7 +45,13 @@ PARAMS = {
     "END_LEAD_S": 1.0,     # players speed up about 1 s before the restart is taken
     "OUT_LINK_S": 12.0,    # a ball-out belongs to the stoppage that starts within 12 s
     "OUT_MIN_S": 8.0,      # a ball-out with no stoppage after it is dead for 8 s
+    "OUT_NEAR_M": 0.0,     # inferred ball-out: last seen this close to a line (0 = rule off) ...
+    "OUT_GAP_S": 2.0,      # ... then unseen for this long
+    "KO_SHARE": 0.9,       # kick-off shape: share of each team in its own half (>1 = rule off)
+    "KO_MIN_S": 2.0,       # ... held this long
 }
+KO_CENTRE_M = 3.0          # a player this close to the centre spot (Law 8: the kicker is on it)
+LAST_SEEN_FRAMES = 3       # ball heading measured over the last 3 frames before it vanished
 
 
 def runs(mask):
@@ -55,9 +67,28 @@ def _speed(xy, fps):
     return v
 
 
-def build_cues(ball_xy, players_xy, pitch, fps, segment=None):
+def kickoff_shape(players_xy, team, pitch):
+    """Per frame: how completely the two teams sit in opposite halves (the smaller of the two
+    teams' own-half shares, 0 if they are not on opposite sides), and whether a player stands
+    within KO_CENTRE_M of the centre spot."""
+    length, width = pitch
+    present = ~np.isnan(players_xy[:, :, 0])
+    left = players_xy[:, :, 0] < length / 2
+    shares = []
+    for t in (0, 1):
+        on = present & (team == t)[None, :]
+        shares.append((left & on).sum(1) / np.maximum(on.sum(1), 1))
+    h, a = shares
+    side = np.where(h >= a, np.minimum(h, 1 - a), np.minimum(1 - h, a))
+    centre = np.sqrt((players_xy[:, :, 0] - length / 2) ** 2 + (players_xy[:, :, 1] - width / 2) ** 2)
+    with np.errstate(invalid="ignore"):
+        at_spot = np.nanmin(np.where(present, centre, np.inf), axis=1) <= KO_CENTRE_M
+    return side.astype(np.float32), at_spot
+
+
+def build_cues(ball_xy, players_xy, pitch, fps, segment=None, team=None):
     """Per-frame cues. ball_xy (n,2) and players_xy (n,p,2) in metres, NaN where untracked;
-    segment (n,) breaks the smoothing and norm at half-time."""
+    team (p,) 0 home / 1 away; segment (n,) breaks the smoothing and norm at half-time."""
     length, width = pitch
     n = len(ball_xy)
     segment = np.zeros(n, np.int8) if segment is None else segment
@@ -77,8 +108,10 @@ def build_cues(ball_xy, players_xy, pitch, fps, segment=None):
         norm = np.repeat(norm.values, fps)[:len(sm)]
         speed[idx] = sm.values
         ratio[idx] = sm.values / norm
+    side, at_spot = kickoff_shape(players_xy, team, pitch)
     return {"speed": speed, "ratio": ratio, "beyond": beyond, "ball_seen": ~np.isnan(x),
-            "segment": segment, "fps": fps}
+            "ball_xy": ball_xy.astype(np.float32), "ko_side": side, "ko_spot": at_spot,
+            "pitch": np.asarray(pitch, np.float32), "segment": segment, "fps": fps}
 
 
 def ball_gap_profile(cues, graded):
@@ -118,7 +151,28 @@ def dropout(cues, profile, seed=0):
     out = dict(cues)
     out["ball_seen"] = ~hidden
     out["beyond"] = np.where(hidden, np.nan, cues["beyond"])
+    out["ball_xy"] = np.where(hidden[:, None], np.nan, cues["ball_xy"])
     return out
+
+
+def inferred_outs(cues, p=PARAMS):
+    """Frames where the ball vanished near a line, heading for it, and stayed unseen OUT_GAP_S."""
+    if p["OUT_NEAR_M"] <= 0:
+        return np.zeros(0, int)
+    fps = cues["fps"]
+    length, width = cues["pitch"]
+    xy = cues["ball_xy"]
+    a, b = runs(~cues["ball_seen"])
+    keep = (a > LAST_SEEN_FRAMES) & ((b - a) >= p["OUT_GAP_S"] * fps)
+    a = a[keep]
+    last, before = xy[a - 1], xy[a - 1 - LAST_SEEN_FRAMES]
+    v = last - before
+    # distance to each line, and whether the ball was moving towards it
+    dist = np.stack([last[:, 0], length - last[:, 0], last[:, 1], width - last[:, 1]], 1)
+    towards = np.stack([v[:, 0] < 0, v[:, 0] > 0, v[:, 1] < 0, v[:, 1] > 0], 1)
+    with np.errstate(invalid="ignore"):
+        hit = ((dist <= p["OUT_NEAR_M"]) & towards).any(1)
+    return a[np.nan_to_num(hit, nan=0).astype(bool)]
 
 
 def detect(cues, p=PARAMS):
@@ -145,6 +199,7 @@ def detect(cues, p=PARAMS):
     # Rule 1 and 3: ball past a line.
     out = np.nan_to_num(cues["beyond"], nan=-1.0) > 0
     oa, _ = runs(out)
+    oa = np.union1d(oa, inferred_outs(cues, p))                 # rule 4
     stop_starts = np.array([s for s, _ in stops]) if stops else np.zeros(0, int)
     for o in oa:
         later = stop_starts[(stop_starts >= o - int(p["START_BACK_S"] * fps))
@@ -154,6 +209,10 @@ def detect(cues, p=PARAMS):
             stops[k] = (min(stops[k][0], o), stops[k][1])
         else:
             stops.append((o, o + int(p["OUT_MIN_S"] * fps)))
+    # Rule 5: kick-off shape.
+    if p["KO_SHARE"] <= 1:
+        ka, kb = runs((cues["ko_side"] >= p["KO_SHARE"]) & cues["ko_spot"])
+        stops += [(s, e) for s, e in zip(ka, kb) if e - s >= p["KO_MIN_S"] * fps]
     for s, e in stops:
         dead[s:min(e, n)] = True
     return dead

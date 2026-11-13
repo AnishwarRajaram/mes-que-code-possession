@@ -7,6 +7,8 @@
     python anishwar/pipeline.py cues            # dead-ball cues measured on other matches (IDSSE)
     python anishwar/pipeline.py calibrate       # fit the dead-ball rules on IDSSE, held out
     python anishwar/pipeline.py challenger      # logistic regression challenger, same test
+    python anishwar/pipeline.py engine          # score engine: named evidence, learned points
+    python anishwar/pipeline.py deadcheck       # dead-ball rules on our match, label-free checks
     python anishwar/pipeline.py eval CSV...     # correctness check on the public window
 
 Every subcommand prints aggregates only -- never rows of tracking, tagging or labels -- so its
@@ -152,6 +154,29 @@ def challenger(args):
     print(challenger_module.report(use_dropout=not args.full_ball))
 
 
+def deadcheck(_args):
+    import warnings
+
+    from mtah import calibrate as calibrate_module, census as census_module, deadball
+
+    warnings.simplefilter("ignore", RuntimeWarning)
+    cues, _ = calibrate_module.our_cues()
+    dead = deadball.detect(cues)
+    print(census_module.format_dead_check(
+        "dead-ball rules on the provided game (label-free checks)",
+        census_module.dead_check(dead, cues),
+        reference="dead share 44.9%, 96 stoppages per 90, length p50 19.6 s, under 5 s 8%"))
+
+
+def engine(args):
+    import warnings
+
+    from mtah import engine as engine_module
+
+    warnings.simplefilter("ignore", RuntimeWarning)
+    print(engine_module.report(use_dropout=not args.full_ball))
+
+
 def evaluate(args):
     from mtah import harness
 
@@ -182,11 +207,14 @@ def main():
     commands.add_parser("cues", help="dead-ball cues measured on other matches (IDSSE)") \
         .set_defaults(run=cues)
     for name, fn, text in (("calibrate", calibrate, "fit the dead-ball rules on IDSSE"),
-                           ("challenger", challenger, "logistic challenger on IDSSE")):
+                           ("challenger", challenger, "logistic challenger on IDSSE"),
+                           ("engine", engine, "score engine (named evidence points) on IDSSE")):
         cmd = commands.add_parser(name, help=text + ", nested leave-one-match-out")
         cmd.add_argument("--full-ball", action="store_true",
                          help="keep the IDSSE ball fully tracked instead of hiding it like ours")
         cmd.set_defaults(run=fn)
+    commands.add_parser("deadcheck", help="dead-ball rules on the provided game, label-free") \
+        .set_defaults(run=deadcheck)
     eval_cmd = commands.add_parser("eval", help="correctness check on the public window")
     eval_cmd.add_argument("csv", nargs="+", help="submission CSVs")
     eval_cmd.set_defaults(run=evaluate)

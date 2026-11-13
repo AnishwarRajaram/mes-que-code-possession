@@ -145,6 +145,63 @@ def set_piece_catch(dead):
     return caught, len(starts)
 
 
+def dead_check(dead, cues):
+    """Label-free checks of a dead-ball mask on the provided game, aggregates only. Compared in
+    the report with IDSSE's DFL truth (other matches), never with any label of this game."""
+    from . import deadball, load
+    fps = float(config.FPS)
+    graded = load.graded_mask(len(dead))
+    halves = [(first, last + 1) for _, first, last in config.half_blocks()]
+    stops = []
+    for a, b in halves:
+        s, e = deadball.runs(dead[a:b])
+        stops += [(a + x, a + y) for x, y in zip(s, e) if y - x >= fps]
+    lengths = np.array([b - a for a, b in stops]) / fps
+    minutes = graded.sum() / fps / 60
+    out = np.nan_to_num(cues["beyond"], nan=-1.0) > 0
+    seen = cues["ball_seen"]
+    blocks = []
+    step = int(BLOCK_MIN * 60 * fps)
+    for a, b in halves:
+        blocks += [float(dead[lo:min(b, lo + step)].mean()) for lo in range(a, b, step)
+                   if min(b, lo + step) - lo >= 60 * fps]
+    caught, total = set_piece_catch(dead)
+    return {
+        "dead_share": float(dead[graded].mean()),
+        "halves": [float(dead[a:b].mean()) for a, b in halves],
+        "blocks": blocks,
+        "stops_per90": len(stops) * 90 / minutes,
+        "stop_pct": _pct(lengths),
+        "under_5s": float((lengths < 5).mean()) if len(lengths) else 0.0,
+        "over_60s": float((lengths > 60).mean()) if len(lengths) else 0.0,
+        "with_ball_out": float(np.mean([out[a:b].any() for a, b in stops])) if stops else 0.0,
+        "dead_if_missing": float(dead[graded & ~seen].mean()),
+        "dead_if_seen": float(dead[graded & seen].mean()),
+        "missing_if_dead": float((~seen)[graded & dead].mean()),
+        "set_pieces": (caught, total),
+    }
+
+
+def format_dead_check(name, r, reference=None):
+    pct = lambda d: " ".join("{:.1f}".format(d[p]) for p in PERCENTILES)  # noqa: E731
+    lines = [name,
+             "  dead share {:.1%}  (halves {})".format(
+                 r["dead_share"], " / ".join("{:.1%}".format(h) for h in r["halves"])),
+             "  dead share per 15-min block: " + " ".join("{:.0%}".format(b) for b in r["blocks"]),
+             "  stoppages {:.0f} per 90, length s p10/25/50/75/90: {}".format(
+                 r["stops_per90"], pct(r["stop_pct"])),
+             "  stoppages under 5 s {:.0%}, over 60 s {:.0%}, with the ball seen past a line "
+             "{:.0%}".format(r["under_5s"], r["over_60s"], r["with_ball_out"]),
+             "  dead where the ball is missing {:.0%}, where it is seen {:.0%}; ball missing "
+             "on {:.0%} of dead frames".format(r["dead_if_missing"], r["dead_if_seen"],
+                                               r["missing_if_dead"]),
+             "  Smart Tagging set pieces with dead ball from {:.0f} s before to {:.0f} s after: "
+             "{}/{}".format(SET_PIECE_BEFORE_S, SET_PIECE_AFTER_S, *r["set_pieces"])]
+    if reference:
+        lines.append("  other matches (IDSSE, DFL truth): " + reference)
+    return "\n".join(lines)
+
+
 def detector_breakdown(stoppages, dead):
     """[(rule, count, dead minutes, median length s, share under 5 s)] for detect()'s list,
     each stoppage counted under the rules that found it (before overlaps merge)."""
