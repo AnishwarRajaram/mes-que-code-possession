@@ -109,8 +109,16 @@ def build_cues(ball_xy, players_xy, pitch, fps, segment=None, team=None):
         speed[idx] = sm.values
         ratio[idx] = sm.values / norm
     side, at_spot = kickoff_shape(players_xy, team, pitch)
+    near = []
+    for t in (0, 1):                     # each team's nearest player to the ball, metres
+        cols = np.flatnonzero(team == t)
+        d = np.sqrt(((players_xy[:, cols, :] - ball_xy[:, None, :]) ** 2).sum(-1))
+        with np.errstate(invalid="ignore"):
+            near.append(np.nanmin(np.where(np.isnan(d), np.inf, d), axis=1).astype(np.float32))
+    near = [np.where(np.isfinite(v), v, np.nan) for v in near]
     return {"speed": speed, "ratio": ratio, "beyond": beyond, "ball_seen": ~np.isnan(x),
             "ball_xy": ball_xy.astype(np.float32), "ko_side": side, "ko_spot": at_spot,
+            "near_home": near[0], "near_away": near[1],
             "pitch": np.asarray(pitch, np.float32), "segment": segment, "fps": fps}
 
 
@@ -152,6 +160,9 @@ def dropout(cues, profile, seed=0):
     out["ball_seen"] = ~hidden
     out["beyond"] = np.where(hidden, np.nan, cues["beyond"])
     out["ball_xy"] = np.where(hidden[:, None], np.nan, cues["ball_xy"])
+    for k in ("near_home", "near_away"):
+        if k in cues:
+            out[k] = np.where(hidden, np.nan, cues[k])
     return out
 
 

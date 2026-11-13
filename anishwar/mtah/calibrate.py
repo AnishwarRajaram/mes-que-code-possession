@@ -20,7 +20,7 @@ import os
 
 import numpy as np
 
-from . import config, deadball, external, load
+from . import config, deadball, external, load, shape
 
 RANGES = {
     "SLOW": np.round(np.arange(0.50, 1.001, 0.05), 2),
@@ -41,7 +41,7 @@ N_SEEDS = 40
 TOP_SEEDS = 4
 STEPS = (-2, -1, 1, 2)
 PLATEAU = 0.01
-CUES_VERSION = 2
+CUES_VERSION = 5
 SEED = 0
 
 
@@ -54,9 +54,10 @@ def our_cues():
     players = load.to_metres(atd["players"][:, on, :2])
     n = len(ball)
     segment = (np.arange(n) >= config.half_blocks()[1][1]).astype(np.int8)
-    return deadball.build_cues(ball, players, config.PITCH, config.FPS, segment,
-                               (team[on] == load.AWAY).astype(np.int8)), \
-        load.graded_mask(n)
+    t = (team[on] == load.AWAY).astype(np.int8)
+    c = deadball.build_cues(ball, players, config.PITCH, config.FPS, segment, t)
+    c["shape"] = shape.team_features(players, t, config.PITCH, config.FPS, segment)
+    return c, load.graded_mask(n)
 
 
 def idsse_cues(match_id):
@@ -70,6 +71,9 @@ def idsse_cues(match_id):
     c = deadball.build_cues(m["ball_xy"], m["players_xy"], tuple(m["pitch"]), 25, m["period"],
                             m["team"])
     c["dead"] = ~m["alive"]
+    c["owner"] = m["owner"]
+    c["shape"] = shape.team_features(m["players_xy"], m["team"], tuple(m["pitch"]), 25,
+                                     m["period"])
     np.savez_compressed(path, **c)
     return c
 

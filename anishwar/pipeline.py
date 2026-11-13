@@ -9,6 +9,7 @@
     python anishwar/pipeline.py challenger      # logistic regression challenger, same test
     python anishwar/pipeline.py engine          # score engine: named evidence, learned points
     python anishwar/pipeline.py deadcheck       # dead-ball rules on our match, label-free checks
+    python anishwar/pipeline.py run [--name N]  # build the submission file (results/N.csv)
     python anishwar/pipeline.py eval CSV...     # correctness check on the public window
 
 Every subcommand prints aggregates only -- never rows of tracking, tagging or labels -- so its
@@ -177,6 +178,22 @@ def engine(args):
     print(engine_module.report(use_dropout=not args.full_ball))
 
 
+def run(args):
+    import warnings
+
+    from mtah import census as census_module, harness, submit
+
+    warnings.simplefilter("ignore", RuntimeWarning)
+    path, digest, codes = submit.write(args.name)
+    problem = harness.pm.validate_submission(harness.pm.read_label_csv(path), config.N_FRAMES)
+    print("wrote {}  sha256 {}  validation: {}".format(
+        os.path.relpath(path, config.REPO_ROOT), digest[:16], problem or "ok"))
+    print(census_module.format_census(args.name + "  (full match)", census_module.census(codes)))
+    caught, total = census_module.set_piece_catch(codes == harness.D)
+    print("Smart Tagging set pieces with dead ball near their tagged start: {}/{}".format(
+        caught, total))
+
+
 def evaluate(args):
     from mtah import harness
 
@@ -215,6 +232,9 @@ def main():
         cmd.set_defaults(run=fn)
     commands.add_parser("deadcheck", help="dead-ball rules on the provided game, label-free") \
         .set_defaults(run=deadcheck)
+    run_cmd = commands.add_parser("run", help="build the submission file from the tracking")
+    run_cmd.add_argument("--name", default="Mes Que Code", help="file name, without .csv")
+    run_cmd.set_defaults(run=run)
     eval_cmd = commands.add_parser("eval", help="correctness check on the public window")
     eval_cmd.add_argument("csv", nargs="+", help="submission CSVs")
     eval_cmd.set_defaults(run=evaluate)
