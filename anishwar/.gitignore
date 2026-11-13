@@ -26,3 +26,6 @@ external/
 
 # private local notes and the safety net: never published
 notes/
+
+# local Python environment
+.venv/
