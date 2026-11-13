@@ -34,14 +34,14 @@ TURN_FRAMES = 3      # ball direction compared over 0.12 s either side
 
 # Calibrated end to end on the seven IDSSE matches (poss_calibrate.py): our dead-ball rules, the
 # ball hidden like ours, official spellF1. Best on all seven, all 10 one-step neighbours within
-# 0.01. Nested leave-one-match-out: spellF1 0.471 +- 0.023, macroF1 0.744 +- 0.017.
+# 0.01. Nested leave-one-match-out: spellF1 0.503 +- 0.012, macroF1 0.769 +- 0.014.
 PARAMS = {
     "TOUCH_R": 1.25,    # a player within 1.25 m of the ball ...
     "MARGIN_M": 0.25,   # ... and the nearest opponent at least 0.25 m further away ...
     "TURN_DEG": 10.0,   # ... while the ball turns by 10 degrees or more ...
-    "JUMP_MS": 6.0,     # ... or changes speed by 6 m/s (a kick or a stop)
+    "JUMP_MS": 8.0,     # ... or changes speed by 8 m/s (a kick or a stop)
     "CARRY_MS": 0.0,    # slow ball at the feet: rejected (0 = off), it adds false touches in duels
-    "GAP_FRAC": 0.75,   # a change hidden by a ball gap happens three-quarters of the way through
+    "GAP_FRAC": 1.0,    # a change hidden by a ball gap is placed at its end
 }
 
 
@@ -105,8 +105,8 @@ def control_filter(codes, segment, fps, control_s=CONTROL_S):
     return out
 
 
-# Nested leave-one-match-out on IDSSE: spellF1 0.475 -> 0.486, macroF1 0.745 -> 0.753; folds
-# chose 0.45-0.5 / 2-3 s, all seven together 0.45 / 2 s. Averaging first (SMOOTH_S) added nothing.
+# Nested leave-one-match-out on IDSSE: spellF1 0.512 -> 0.526, macroF1 0.772 -> 0.779, better on
+# all seven; folds chose 0.45 / 2 s (one 3 s). Averaging first (SMOOTH_S) added nothing.
 SHAPE = {
     "SWITCH_P": 0.45,   # inside a ball gap, the other team takes over when the players' shape says
     "SWITCH_S": 2.0,   # so with this probability, held for this long (shape.py) ...

@@ -98,11 +98,11 @@ def inputs(cues, codes0):
 # Fitted on all seven IDSSE matches (ball hidden like ours, three placements, live frames without
 # the ball, DFL owner as label, 5 frames a second): poss_calibrate.shape_fit reproduces it.
 # Order: mean, sd, then weights (bias first, then NAMES). Nested leave-one-match-out owner
-# accuracy 79.8% on live frames without the ball (holding the last owner: 59.8%).
+# accuracy 83.2% on live frames without the ball (holding the last owner: 75.6%).
 MODEL = (
-    np.array([0.153433, 3.85145, 1.05148, 0.504346, 0.0295457, 0.0115194, 0.0987706]),
-    np.array([3.5856, 37.3239, 8.24661, 5.3895, 0.323859, 0.258241, 0.851525]),
-    np.array([0.221281, 0.939486, -1.26, 0.890216, 0.993391, 0.93143, 0.304597, 0.0530664]),
+    np.array([-0.0893369, 5.76451, 0.966337, 0.455832, 0.0484894, 0.0322447, 0.534331]),
+    np.array([3.51897, 35.0312, 8.16746, 5.50758, 0.315507, 0.558993, 1.80834]),
+    np.array([0.0915354, 0.904832, -1.44306, 0.786246, 0.983624, 1.05135, 0.842327, 0.149746]),
 )
 
 

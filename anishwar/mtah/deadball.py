@@ -5,8 +5,9 @@ Three parts:
   build_cues   per-frame cues from positions only (players' mean speed, its ratio to the local
                5-minute norm, metres the ball is past a line), identical for both data sources
   dropout      hides the ball on another match the way our tactical tracking loses it: in long
-               blocks, more often while players are slow. The profile is measured on our match's
-               tracking (no labels), see ball_gap_profile()
+               blocks, at our rates separately in dead and in live play (as our own rules call
+               them on both matches), more often while players are slow. The profile is measured
+               on our match's tracking (no labels), see ball_gap_profile()
   detect       the rules. Every constant is in PARAMS and is calibrated on other matches with
                labels (IDSSE, DFL ball status), leave-one-match-out, never on the provided game
 
@@ -34,9 +35,9 @@ SMOOTH_S = 1.0          # players' speed smoothed over 1 s, the length of a stri
 MAX_PLAYER_SPEED = 12.0  # faster than any sprinter: a tracking jump, not a player
 
 # Calibrated on the seven IDSSE matches with the ball hidden like ours (calibrate.py): best on all
-# seven, all 21 one-step neighbours within 0.01. Nested leave-one-match-out: stoppage F1
-# 0.741 +- 0.022, frame F1 0.854 +- 0.020. Rule 4 (inferred ball-out) was rejected in all seven
-# folds and stays off; rule 5 (kick-off shape) was kept in six of seven.
+# seven, 21 of 22 one-step neighbours within 0.01, none at the edge of its range. Nested
+# leave-one-match-out: stoppage F1 0.749 +- 0.027, frame F1 0.863 +- 0.018. With the ball hidden
+# separately in dead and live play, rule 4 (inferred ball-out) was kept in five of seven folds.
 PARAMS = {
     "SLOW": 0.95,          # players at or below their usual pace ...
     "RESUME": 1.15,        # ... and staying under 1.15x it ...
@@ -45,7 +46,7 @@ PARAMS = {
     "END_LEAD_S": 1.0,     # players speed up about 1 s before the restart is taken
     "OUT_LINK_S": 12.0,    # a ball-out belongs to the stoppage that starts within 12 s
     "OUT_MIN_S": 8.0,      # a ball-out with no stoppage after it is dead for 8 s
-    "OUT_NEAR_M": 0.0,     # inferred ball-out: last seen this close to a line (0 = rule off) ...
+    "OUT_NEAR_M": 1.0,     # inferred ball-out: last seen this close to a line (0 = rule off) ...
     "OUT_GAP_S": 2.0,      # ... then unseen for this long
     "KO_SHARE": 0.9,       # kick-off shape: share of each team in its own half (>1 = rule off)
     "KO_MIN_S": 2.0,       # ... held this long
@@ -122,40 +123,62 @@ def build_cues(ball_xy, players_xy, pitch, fps, segment=None, team=None):
             "pitch": np.asarray(pitch, np.float32), "segment": segment, "fps": fps}
 
 
+BANDS = np.array([0, 0.5, 0.65, 0.8, 1.0, 1.2, 1.5, np.inf])
+
+
+def _band(ratio):
+    return np.clip(np.searchsorted(BANDS, np.nan_to_num(ratio, nan=1.0), side="right") - 1,
+                   0, len(BANDS) - 2)
+
+
 def ball_gap_profile(cues, graded):
-    """How the ball goes missing on a match, as aggregates: missing share, gap lengths (s) and
-    the missing rate in each band of the speed ratio. Measured on tracking only, no labels."""
+    """How the ball goes missing on a match, as aggregates, separately where our own rules call
+    the ball dead and where they call it live: the missing share, the gap lengths (s, each gap cut
+    at the edge of that state) and the missing rate in each band of the speed ratio. Measured on
+    tracking only, no labels; the same rules run on the other match before hiding its ball."""
     fps = cues["fps"]
-    miss = ~cues["ball_seen"] & graded
-    a, b = runs(miss)
-    lengths = (b - a) / fps
-    bands = np.array([0, 0.5, 0.65, 0.8, 1.0, 1.2, 1.5, np.inf])
-    r = cues["ratio"][graded]
-    m = miss[graded]
-    band = np.clip(np.searchsorted(bands, r, side="right") - 1, 0, len(bands) - 2)
-    rate = np.array([m[band == k].mean() if (band == k).any() else 0.0
-                     for k in range(len(bands) - 1)])
-    return {"share": float(m.mean()), "gaps_s": lengths[lengths >= 1.0], "bands": bands,
-            "rate": rate}
+    dead = detect(cues)
+    miss = ~cues["ball_seen"]
+    band = _band(cues["ratio"])
+    out = {"bands": BANDS}
+    for name, state in (("dead", dead), ("live", ~dead)):
+        here = graded & state
+        a, b = runs(miss & here)
+        lengths = (b - a) / fps
+        rate = np.array([miss[here & (band == k)].mean() if (here & (band == k)).any() else 0.0
+                         for k in range(len(BANDS) - 1)])
+        out[name] = {"share": float(miss[here].mean()), "gaps_s": lengths[lengths >= 1.0],
+                     "rate": rate}
+    return out
 
 
 def dropout(cues, profile, seed=0):
-    """A copy of cues with the ball hidden in blocks drawn from profile: gap lengths resampled
-    from ours, placed more often where players are slow, until the missing share matches."""
+    """A copy of cues with the ball hidden the way ours goes missing: our dead-ball rules run on
+    this match first, then, separately in its dead and its live stretches, gaps of our lengths are
+    placed (more often where players are slow, as on ours) until each state's missing share
+    matches ours. A gap never runs past the edge of its state."""
     fps = cues["fps"]
     n = len(cues["ratio"])
     rng = np.random.default_rng(seed)
-    band = np.clip(np.searchsorted(profile["bands"], np.nan_to_num(cues["ratio"], nan=1.0),
-                                   side="right") - 1, 0, len(profile["rate"]) - 1)
-    accept = profile["rate"][band] / profile["rate"].max()
+    dead = detect(cues)
+    band = _band(cues["ratio"])
     hidden = ~cues["ball_seen"].copy()
-    target = profile["share"]
-    while hidden.mean() < target:
-        start = int(rng.integers(0, n))
-        if rng.random() > accept[start]:
+    for name, state in (("dead", dead), ("live", ~dead)):
+        prof = profile[name]
+        frames = np.flatnonzero(state)
+        if not len(frames) or not len(prof["gaps_s"]):
             continue
-        length = int(rng.choice(profile["gaps_s"]) * fps)
-        hidden[start:start + length] = True
+        a, b = runs(state)
+        run_end = np.zeros(n, np.int64)
+        for x, y in zip(a, b):
+            run_end[x:y] = y
+        accept = prof["rate"][band] / max(prof["rate"].max(), 1e-9)
+        while hidden[frames].mean() < prof["share"]:
+            start = int(frames[rng.integers(0, len(frames))])
+            if rng.random() > accept[start]:
+                continue
+            length = int(rng.choice(prof["gaps_s"]) * fps)
+            hidden[start:min(start + length, run_end[start])] = True
     out = dict(cues)
     out["ball_seen"] = ~hidden
     out["beyond"] = np.where(hidden, np.nan, cues["beyond"])
