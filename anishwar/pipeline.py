@@ -4,6 +4,7 @@
     python anishwar/pipeline.py cache           # parse tracking + tagging once, report aggregates
     python anishwar/pipeline.py features        # per-frame features, full-match summary
     python anishwar/pipeline.py census CSV...   # label-free plausibility checks of submissions
+    python anishwar/pipeline.py cues            # dead-ball cues measured on other matches (IDSSE)
     python anishwar/pipeline.py eval CSV...     # correctness check on the public window
 
 Every subcommand prints aggregates only -- never rows of tracking, tagging or labels -- so its
@@ -122,6 +123,15 @@ def census(args):
                                                    census_module.SET_PIECE_AFTER_S, caught, total))
 
 
+def cues(_args):
+    import warnings
+
+    from mtah import cues as cues_module
+
+    warnings.simplefilter("ignore", RuntimeWarning)
+    print(cues_module.report())
+
+
 def evaluate(args):
     from mtah import harness
 
@@ -149,6 +159,8 @@ def main():
     census_cmd = commands.add_parser("census", help="label-free plausibility checks")
     census_cmd.add_argument("csv", nargs="+", help="submission CSVs")
     census_cmd.set_defaults(run=census)
+    commands.add_parser("cues", help="dead-ball cues measured on other matches (IDSSE)") \
+        .set_defaults(run=cues)
     eval_cmd = commands.add_parser("eval", help="correctness check on the public window")
     eval_cmd.add_argument("csv", nargs="+", help="submission CSVs")
     eval_cmd.set_defaults(run=evaluate)

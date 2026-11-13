@@ -36,5 +36,18 @@ python anishwar/pipeline.py census CSV...   # label-free plausibility checks
 python anishwar/pipeline.py eval CSV...     # correctness check on the public window
 ```
 
+## Data from other matches
+
+Calibration uses the IDSSE dataset: seven Bundesliga 2022/23 matches with official DFL position
+data and per-frame ball status and possession. Bassek, M., Rein, R., Weber, H. & Memmert, D.
+(2025). An integrated dataset of spatiotemporal and event data in elite soccer. *Scientific Data*
+12, 195. https://doi.org/10.1038/s41597-025-04505-y. Data © DFL, released under CC-BY 4.0. It is
+downloaded from the dataset's public mirror (huggingface.co/datasets/pysport/idsse-data) into
+`anishwar/external/idsse/` and read with kloppy; it is never committed.
+
+```bash
+python anishwar/pipeline.py cues            # dead-ball cues measured on the IDSSE matches
+```
+
 All output is aggregate-only. Everything the pipeline writes (`cache/`, `results/`, `eval_out/`)
 is gitignored, because it is derived from the match data.
