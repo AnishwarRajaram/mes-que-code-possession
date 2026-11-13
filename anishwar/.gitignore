@@ -1,0 +1,28 @@
+# Everything derived from the match data stays out of git. The repository is public and the data
+# is not redistributable (RULES.md) -- a per-frame cache or a full set of labels reconstructs it.
+
+# local caches of parsed tracking and tagging
+cache/
+
+# submissions and variants: a full set of labels for the match
+results/
+*.csv
+
+# scorer output and harness reports
+eval_out/
+reports/
+
+# safety net: never hand-label the provided game, but keep this folder out of git regardless
+labels/
+
+# data from other matches (downloaded, licensed separately): never committed
+external/
+
+# array dumps of any kind, wherever they land
+*.npz
+*.npy
+*.parquet
+*.pkl
+
+# private local notes and the safety net: never published
+notes/
