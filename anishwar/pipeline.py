@@ -5,6 +5,8 @@
     python anishwar/pipeline.py features        # per-frame features, full-match summary
     python anishwar/pipeline.py census CSV...   # label-free plausibility checks of submissions
     python anishwar/pipeline.py cues            # dead-ball cues measured on other matches (IDSSE)
+    python anishwar/pipeline.py calibrate       # fit the dead-ball rules on IDSSE, held out
+    python anishwar/pipeline.py challenger      # logistic regression challenger, same test
     python anishwar/pipeline.py eval CSV...     # correctness check on the public window
 
 Every subcommand prints aggregates only -- never rows of tracking, tagging or labels -- so its
@@ -132,6 +134,24 @@ def cues(_args):
     print(cues_module.report())
 
 
+def calibrate(args):
+    import warnings
+
+    from mtah import calibrate as calibrate_module
+
+    warnings.simplefilter("ignore", RuntimeWarning)
+    print(calibrate_module.report(use_dropout=not args.full_ball))
+
+
+def challenger(args):
+    import warnings
+
+    from mtah import challenger as challenger_module
+
+    warnings.simplefilter("ignore", RuntimeWarning)
+    print(challenger_module.report(use_dropout=not args.full_ball))
+
+
 def evaluate(args):
     from mtah import harness
 
@@ -161,6 +181,12 @@ def main():
     census_cmd.set_defaults(run=census)
     commands.add_parser("cues", help="dead-ball cues measured on other matches (IDSSE)") \
         .set_defaults(run=cues)
+    for name, fn, text in (("calibrate", calibrate, "fit the dead-ball rules on IDSSE"),
+                           ("challenger", challenger, "logistic challenger on IDSSE")):
+        cmd = commands.add_parser(name, help=text + ", nested leave-one-match-out")
+        cmd.add_argument("--full-ball", action="store_true",
+                         help="keep the IDSSE ball fully tracked instead of hiding it like ours")
+        cmd.set_defaults(run=fn)
     eval_cmd = commands.add_parser("eval", help="correctness check on the public window")
     eval_cmd.add_argument("csv", nargs="+", help="submission CSVs")
     eval_cmd.set_defaults(run=evaluate)

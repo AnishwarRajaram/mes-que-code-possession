@@ -47,7 +47,13 @@ downloaded from the dataset's public mirror (huggingface.co/datasets/pysport/ids
 
 ```bash
 python anishwar/pipeline.py cues            # dead-ball cues measured on the IDSSE matches
+python anishwar/pipeline.py calibrate       # fit the dead-ball rules, nested leave-one-match-out
+python anishwar/pipeline.py challenger      # logistic regression challenger under the same test
 ```
+
+Before scoring, the IDSSE ball is hidden the way our tactical tracking loses it: in long gaps,
+more often while players are slow. That profile is measured on our tracking alone, with no
+labels. Both commands run single-threaded in a few minutes and under 1 GB of memory.
 
 All output is aggregate-only. Everything the pipeline writes (`cache/`, `results/`, `eval_out/`)
 is gitignored, because it is derived from the match data.
