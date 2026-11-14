@@ -34,14 +34,15 @@ The method uses the provided match in three ways only:
 
 The team compared rules with learned models under the same test. A points-based score engine with sign-constrained weights scored below the rules. A logistic regression on the dead-ball cues scored above them on dead-ball measures, and Section 6 reports the comparison. Both learned models are harder to interpret than the rules.
 
-The method retains one learned component. A small logistic model reads possession from team shape when the ball is not tracked. It improves the score on all seven held-out matches, and its weights have a direct football reading.
+The method retains one learned component. A small logistic model reads possession from team shape when the ball is not tracked. It improves the score on six of the seven held-out matches, and its weights have a direct football reading.
 
 ### 2.3 Evaluation Protocol
 
 All design decisions use nested leave-one-match-out validation on seven labelled matches:
 
 - The search for each match uses the other six matches. The chosen constants are then scored once on the held-out match.
-- The search starts from spread-out seed points drawn by Latin hypercube sampling and refines them by coordinate ascent.
+- The search starts from spread-out seed points drawn by Latin hypercube sampling with a fixed random seed and refines them by coordinate ascent. The stored constants are never a starting point. Exact ties go to the smaller grid value, so a constant with no effect settles at the bottom of its range.
+- The dead-ball rules also set the ball-hiding profile of Section 4.3, so the dead-ball search is repeated with the profile re-measured until it returns its own input. It did so in the second round. Re-running the search therefore returns exactly the stored values.
 - The final constants are the best setting on all seven matches. The search reports how many one-step neighbours score within 0.01 of it and which constants sit at the edge of their search range. Section 6 states both for each stage.
 - Possession is scored with the organisers' code in `evaluation/possession_metrics.py`.
 
@@ -101,14 +102,13 @@ This profile is the only statistic of the provided match that enters calibration
 The rules follow Law 9 of the Laws of the Game. The ball is out of play when it wholly crosses a line or when the referee stops play.
 
 1. **Ball past a line.** The ball is dead from the frame it crosses the line.
-2. **Inferred ball-out.** The ball is dead from the frame it vanishes if it was last seen within 1 m of a line, moving towards it, and stays unseen for 2 seconds.
-3. **Players stop.** Players at or below their usual pace for 8 seconds mark a stoppage. The usual pace is the local five-minute norm. The stoppage covers the whole stretch below 1.15 times that pace and ends 1 second before the players accelerate for the restart.
-4. **Ball-out linking.** A ball-out joins any stoppage that starts within 12 seconds. A ball-out with no following stoppage is dead for 8 seconds. This case covers quick throw-ins.
-5. **Kick-off.** Law 8 places each team in its own half with the kicker on the centre spot. Each team at least 90% in its own half, with a player on the centre spot for 2 seconds, marks a dead ball.
+2. **Players stop.** Players at or below their usual pace for 9 seconds mark a stoppage. The usual pace is the local five-minute norm. The stoppage starts 0.5 seconds into the stretch below 1.15 times that pace and ends 1 second before the players accelerate for the restart.
+3. **Ball-out linking.** A ball-out joins any stoppage that starts within 12 seconds. A ball-out with no following stoppage is dead for 8 seconds. This case covers quick throw-ins.
+4. **Kick-off.** Law 8 places each team in its own half with the kicker on the centre spot. Each team at least 85% in its own half, with a player on the centre spot for half a second, marks a dead ball.
 
 ### 5.2 Possession with the Ball Tracked
 
-1. **Touch.** A touch requires a player within 1.25 m of the ball, the nearest opponent at least 0.25 m further away, and a ball action. A ball action is a turn of at least 10 degrees or a speed change of at least 8 m/s.
+1. **Touch.** A touch requires a player within 1.5 m of the ball, the nearest opponent at least 0.25 m further away, and a ball action. A ball action is a turn of at least 20 degrees or a speed change of at least 13 m/s.
 2. **Loose balls and challenges.** Possession stays with the team of the last touch through loose play, contested balls and frames without the ball. One team therefore holds possession at every live frame, as in the framework of Link and Hoernig [3].
 3. **Restarts.** The team of the first touch after a stoppage owns the restart. A live stretch with no touch goes to the team that did not hold the ball before the stoppage.
 4. **Hidden changes.** A change between touches of different teams across a ball gap is placed at the end of the gap.
@@ -116,7 +116,7 @@ The rules follow Law 9 of the Laws of the Game. The ball is out of play when it 
 
 ### 5.3 Possession with the Ball Not Tracked
 
-The team-shape model can transfer possession to the other team inside a gap in the ball tracking. The transfer requires a model probability of at least 0.45 for that team over 2 seconds. On held-out matches the model names the owner correctly on 83.2% of live frames without the ball. Holding the last owner names it correctly on 75.6%.
+The team-shape model can transfer possession to the other team inside a gap in the ball tracking. The transfer requires a model probability of at least 0.45 for that team over 3 seconds. On held-out matches the model names the owner correctly on 82.3% of live frames without the ball. Holding the last owner names it correctly on 73.8%.
 
 The model is a logistic regression on seven features. Each feature is the home value minus the away value:
 
@@ -152,31 +152,34 @@ Table 4 reports the held-out scores on IDSSE under the hidden-ball condition.
 
 | Stage | Measure | Held-out score |
 |---|---|---|
-| Dead ball | Stoppage F1 / frame F1 | 0.749 / 0.863 |
-| Possession, rules in 5.2 | spellF1 / macroF1 | 0.503 / 0.769 |
-| Possession, rules in 5.2 and 5.3 | spellF1 / macroF1 | 0.526 / 0.779 |
+| Dead ball | Stoppage F1 / frame F1 | 0.756 / 0.865 |
+| Possession, rules in 5.2 | spellF1 / macroF1 | 0.513 / 0.770 |
+| Possession, rules in 5.2 and 5.3 | spellF1 / macroF1 | 0.531 / 0.781 |
 
 The searches differ in how settled their results are:
 
-- **Dead ball.** 21 of 22 one-step neighbours score within 0.01 of the chosen setting. No constant sits at the edge of its range.
-- **Possession rules.** All 8 one-step neighbours score within 0.01. Four constants sit at the edge of their ranges. The turn threshold is at its lower limit of 10 degrees and the speed change at its upper limit of 8 m/s. The hidden-change position is at the end of the gap. The ball-at-the-feet rule is at zero, which disables it. The folds chose touch radii from 1.0 to 1.5 m and speed changes from 4 to 8 m/s.
-- **Team shape.** All seven folds chose a probability of 0.45. Six folds chose 2 seconds and one chose 3 seconds.
+- **Dead ball.** 17 of 18 one-step neighbours score within 0.01 of the chosen setting. The slow-pace threshold sits at the top of its range. The inferred ball-out rule is off, which leaves its duration without effect, and the kick-off duration made no difference on the labelled matches; the tie rule puts both at the bottom of their ranges. Every fold chose the same stoppage start, ball-out link and ball-out duration; the folds differ only in the minimum stoppage length of 9 or 10 seconds and, in one fold, the slow-pace threshold and the kick-off share and duration.
+- **Search audit.** 200 further seed points with the best 20 refined, and 3,000 uniformly random grid points with the best 10 refined, found no setting above the chosen one. The best random point before refinement scored 0.804 against 0.818. By the rule of three, fewer than 0.11% of the grid would score higher, at 95% confidence.
+- **Possession rules.** All 10 one-step neighbours score within 0.01. The ball-at-the-feet rule sits at zero, which disables it, and the hidden-change position at the end of the gap; both are range limits. All seven folds chose a turn of 20 degrees and a change at the end of the gap. The folds chose speed changes from 11 to 14 m/s and touch radii from 1.5 to 2.25 m.
+- **Team shape.** Four folds chose a probability of 0.45 held for 3 seconds and three chose 0.5 held for 2 seconds.
 
-Table 5 separates the remaining error by source.
+Table 5 separates the remaining error by source. The figures use the rules in Section 5.2 without the team-shape model.
 
 **Table 5. Score with each error source removed, all seven matches**
 
 | Condition | spellF1 |
 |---|---|
-| Submitted pipeline | 0.526 |
-| True dead ball | 0.666 |
-| Ball fully tracked | 0.648 |
-| True dead ball and ball fully tracked | 0.814 |
+| Submitted pipeline, rules in 5.2 | 0.519 |
+| True dead ball | 0.655 |
+| Ball fully tracked | 0.654 |
+| True dead ball and ball fully tracked | 0.826 |
 
 The team tested the following alternatives:
 
 - A logistic regression on the dead-ball cues scored 0.762 in stoppage F1 and 0.881 in frame F1. Both scores exceed the rules, and frame F1 is higher on all seven matches. Its weights are harder to read than the rules. The end-to-end possession test decides between the two.
 - A score engine with sign-constrained evidence points scored 0.689 in stoppage F1 and 0.846 in frame F1. It remains a measuring tool. Sustained slow play and a recent ball-out carry almost all of its evidence.
+- An inferred ball-out rule marked the ball dead from the frame it vanished near a line while moving towards it. Every fold switched it off.
+- Three rules for the end of a stoppage gave no in-sample gain and a held-out stoppage F1 of 0.740, with less agreement between folds. They were rejected.
 - A ball-at-the-feet touch rule added false touches in duels.
 - Smoothing the team-shape probability gave no gain.
 
@@ -186,10 +189,10 @@ Table 6 compares the output on the provided match with norms from the labelled m
 
 | Check | Provided match | IDSSE norm |
 |---|---|---|
-| Dead share | 47.0% | 44.9% |
-| Stoppages per 90 minutes | 110 | 96 |
-| Median stoppage length | 21.0 s | 19.6 s |
-| Possessions per 90 minutes | 222 | 304 |
+| Dead share | 46.7% | 44.9% |
+| Stoppages per 90 minutes | 112 | 96 |
+| Median stoppage length | 20.6 s | 19.6 s |
+| Possessions per 90 minutes | 194 | 304 |
 | Tagged set pieces inside a detected stoppage | 51 of 58 | Not applicable |
 
 ## 7. Limitations
@@ -220,8 +223,12 @@ The IDSSE matches are required only to re-derive the constants:
 
 ```bash
 python anishwar/pipeline.py calibrate
+python anishwar/pipeline.py possession
+python anishwar/pipeline.py shape
 python anishwar/pipeline.py deadcheck
 ```
+
+The commands run in this order. Each one prints the constants it finds; these are stored in the source before the next command runs, because each stage uses the constants of the stage before it.
 
 ## References
 

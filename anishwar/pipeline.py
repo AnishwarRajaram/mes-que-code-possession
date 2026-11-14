@@ -8,9 +8,15 @@
     python anishwar/pipeline.py calibrate       # fit the dead-ball rules on IDSSE, held out
     python anishwar/pipeline.py challenger      # logistic regression challenger, same test
     python anishwar/pipeline.py engine          # score engine: named evidence, learned points
+    python anishwar/pipeline.py possession      # fit the possession rules on IDSSE, held out
+    python anishwar/pipeline.py shape           # fit rule 6 and the players' shape model on IDSSE
     python anishwar/pipeline.py deadcheck       # dead-ball rules on our match, label-free checks
     python anishwar/pipeline.py run [--name N]  # build the submission file (results/N.csv)
     python anishwar/pipeline.py eval CSV...     # correctness check on the public window
+
+The constants are re-derived in order -- calibrate, then possession, then shape -- each stage on
+the constants stored by the one before it. The IDSSE commands take --workers N to search folds side
+by side (same result for any N).
 
 Every subcommand prints aggregates only -- never rows of tracking, tagging or labels -- so its
 output is safe to paste anywhere.
@@ -146,6 +152,28 @@ def calibrate(args):
     print(calibrate_module.report(use_dropout=not args.full_ball))
 
 
+def possession(_args):
+    import warnings
+
+    from mtah import poss_calibrate
+
+    warnings.simplefilter("ignore", RuntimeWarning)
+    print(poss_calibrate.report())
+
+
+def shape(_args):
+    import warnings
+
+    from mtah import poss_calibrate
+
+    warnings.simplefilter("ignore", RuntimeWarning)
+    r = poss_calibrate.shape_run()
+    print(poss_calibrate.shape_report(r=r))
+    print("\nshape.MODEL (mean, sd, weights), as stored:")
+    for part in r["model"]:
+        print("    np.array([{}]),".format(", ".join("%g" % float("%.6g" % x) for x in part)))
+
+
 def challenger(args):
     import warnings
 
@@ -229,6 +257,14 @@ def main():
         cmd = commands.add_parser(name, help=text + ", nested leave-one-match-out")
         cmd.add_argument("--full-ball", action="store_true",
                          help="keep the IDSSE ball fully tracked instead of hiding it like ours")
+        cmd.add_argument("--workers", type=int, default=0,
+                         help="fold searches side by side (default: MTAH_WORKERS or 1)")
+        cmd.set_defaults(run=fn)
+    for name, fn, text in (("possession", possession, "fit the possession rules on IDSSE"),
+                           ("shape", shape, "fit rule 6 and the players' shape model on IDSSE")):
+        cmd = commands.add_parser(name, help=text + ", nested leave-one-match-out")
+        cmd.add_argument("--workers", type=int, default=0,
+                         help="fold searches side by side (default: MTAH_WORKERS or 1)")
         cmd.set_defaults(run=fn)
     commands.add_parser("deadcheck", help="dead-ball rules on the provided game, label-free") \
         .set_defaults(run=deadcheck)
@@ -239,6 +275,9 @@ def main():
     eval_cmd.add_argument("csv", nargs="+", help="submission CSVs")
     eval_cmd.set_defaults(run=evaluate)
     args = parser.parse_args()
+    if getattr(args, "workers", None):
+        from mtah import calibrate as calibrate_module
+        calibrate_module.WORKERS = args.workers
     args.run(args)
 
 

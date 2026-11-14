@@ -33,13 +33,14 @@ CONTROL_S = 2.0
 TURN_FRAMES = 3      # ball direction compared over 0.12 s either side
 
 # Calibrated end to end on the seven IDSSE matches (poss_calibrate.py): our dead-ball rules, the
-# ball hidden like ours, official spellF1. Best on all seven, all 10 one-step neighbours within
-# 0.01. Nested leave-one-match-out: spellF1 0.503 +- 0.012, macroF1 0.769 +- 0.014.
+# ball hidden like ours, official spellF1 (poss_calibrate.py gives back exactly these values). Best
+# on all seven, all 10 one-step neighbours within 0.01. Nested leave-one-match-out: spellF1
+# 0.513 +- 0.024, macroF1 0.770 +- 0.006.
 PARAMS = {
-    "TOUCH_R": 1.25,    # a player within 1.25 m of the ball ...
+    "TOUCH_R": 1.5,     # a player within 1.5 m of the ball ...
     "MARGIN_M": 0.25,   # ... and the nearest opponent at least 0.25 m further away ...
-    "TURN_DEG": 10.0,   # ... while the ball turns by 10 degrees or more ...
-    "JUMP_MS": 8.0,     # ... or changes speed by 8 m/s (a kick or a stop)
+    "TURN_DEG": 20.0,   # ... while the ball turns by 20 degrees or more ...
+    "JUMP_MS": 13.0,    # ... or changes speed by 13 m/s (a kick or a stop)
     "CARRY_MS": 0.0,    # slow ball at the feet: rejected (0 = off), it adds false touches in duels
     "GAP_FRAC": 1.0,    # a change hidden by a ball gap is placed at its end
 }
@@ -105,11 +106,11 @@ def control_filter(codes, segment, fps, control_s=CONTROL_S):
     return out
 
 
-# Nested leave-one-match-out on IDSSE: spellF1 0.512 -> 0.526, macroF1 0.772 -> 0.779, better on
-# all seven; folds chose 0.45 / 2 s (one 3 s). Averaging first (SMOOTH_S) added nothing.
+# Nested leave-one-match-out on IDSSE: spellF1 0.519 -> 0.531, macroF1 0.772 -> 0.781, better on
+# six of seven; folds chose 0.45 / 3 s (four) or 0.5 / 2 s (three). Averaging first (SMOOTH_S) added nothing.
 SHAPE = {
     "SWITCH_P": 0.45,   # inside a ball gap, the other team takes over when the players' shape says
-    "SWITCH_S": 2.0,   # so with this probability, held for this long (shape.py) ...
+    "SWITCH_S": 3.0,   # so with this probability, held for this long (shape.py) ...
     "SMOOTH_S": 0.0,   # ... after averaging the probability over this many seconds
 }
 

@@ -16,6 +16,7 @@ plateau: every one-step neighbour scores within PLATEAU of them.
 Every score is cached per (constants, match), so the folds share work. Output is aggregate only.
 """
 
+import multiprocessing
 import os
 
 import numpy as np
@@ -37,8 +38,8 @@ RANGES = {
 }
 KEYS = list(RANGES)
 DROPOUT_SEEDS = (0, 1, 2)
-N_SEEDS = 40
-TOP_SEEDS = 4
+N_SEEDS = 200    # 40 / 4 missed the best setting; 200 / 20 matched a 3,000-point random audit
+TOP_SEEDS = 20
 STEPS = (-2, -1, 1, 2)
 PLATEAU = 0.01
 CUES_VERSION = 5
@@ -123,8 +124,9 @@ def _seeds():
     sizes = [len(RANGES[k]) for k in KEYS]
     cols = [(rng.permutation(N_SEEDS) + rng.random(N_SEEDS)) / N_SEEDS for _ in KEYS]
     pts = [tuple(int(c[j] * n) for c, n in zip(cols, sizes)) for j in range(N_SEEDS)]
-    current = tuple(int(np.abs(RANGES[k] - deadball.PARAMS[k]).argmin()) for k in KEYS)
-    return [current] + pts
+    # Only the fixed-seed points: the stored constants are never a starting point, so the search
+    # depends on the code and the IDSSE data alone and re-running it gives back what is stored.
+    return pts
 
 
 def _neighbours(idx, steps=STEPS):
@@ -136,7 +138,9 @@ def _neighbours(idx, steps=STEPS):
 
 
 def search(ev, matches):
-    """Best constants on these matches: top smart seeds, then coordinate ascent."""
+    """Best constants on these matches: top smart seeds, then coordinate ascent. Exact ties go to
+    the smaller grid index (a constant with no effect settles at the bottom of its range), so the
+    answer does not depend on the order of the search."""
     seeds = [s for s in _seeds() if ev.valid(s)]
     seeds.sort(key=lambda s: -ev.objective(s, matches))
     best, best_obj = None, -1.0
@@ -149,22 +153,44 @@ def search(ev, matches):
                 if not ev.valid(nb):
                     continue
                 o = ev.objective(nb, matches)
-                if o > cur_obj + 1e-9:
+                if o > cur_obj + 1e-9 or (o == cur_obj and nb < cur):
                     cur, cur_obj, improved = nb, o, True
-        if cur_obj > best_obj:
+        if cur_obj > best_obj + 1e-9 or (abs(cur_obj - best_obj) <= 1e-9 and cur < best):
             best, best_obj = cur, cur_obj
     return best, best_obj
+
+
+WORKERS = int(os.environ.get("MTAH_WORKERS", "1"))   # folds searched side by side; same result
+_FOLD = {}
+
+
+def _fold_worker(matches):
+    best, obj = _FOLD["search"](_FOLD["ev"], matches)
+    return best, obj, _FOLD["ev"].cache
+
+
+def fold_searches(search_fn, ev, match_sets):
+    """search_fn(ev, matches) for each set of training matches, in WORKERS processes. Every
+    search is deterministic, so the result does not depend on WORKERS; the workers' caches are
+    merged back into ev."""
+    if WORKERS <= 1:
+        return [search_fn(ev, ms) for ms in match_sets]
+    _FOLD.update(search=search_fn, ev=ev)
+    with multiprocessing.get_context("fork").Pool(WORKERS) as pool:
+        out = pool.map(_fold_worker, match_sets, chunksize=1)
+    for _, _, cache in out:
+        ev.cache.update(cache)
+    return [(best, obj) for best, obj, _ in out]
 
 
 def run(match_ids=external.MATCHES, use_dropout=True):
     ev = Evaluator(match_ids, use_dropout)
     every = list(range(len(match_ids)))
-    held_out = []
-    for mi in every:
-        train = [j for j in every if j != mi]
-        best, _ = search(ev, train)
-        held_out.append((match_ids[mi], ev.params(best), ev.scores(best)[mi]))
-    best, obj = search(ev, every)
+    sets = [[j for j in every if j != mi] for mi in every] + [every]
+    found = fold_searches(search, ev, sets)
+    held_out = [(match_ids[mi], ev.params(found[mi][0]), ev.scores(found[mi][0])[mi])
+                for mi in every]
+    best, obj = found[-1]
     edges = [k for j, k in enumerate(KEYS) if best[j] in (0, len(RANGES[k]) - 1)]
     nb = np.array([ev.objective(n, every) for n in _neighbours(best, (-1, 1)) if ev.valid(n)])
     truth = []
@@ -181,8 +207,8 @@ def _fmt(p):
     return " ".join("{}={:g}".format(k, v) for k, v in p.items())
 
 
-def report(use_dropout=True):
-    r = run(use_dropout=use_dropout)
+def report(use_dropout=True, r=None):
+    r = run(use_dropout=use_dropout) if r is None else r
     lines = ["IDSSE, ball {}{}; {} constant sets evaluated".format(
         "hidden like ours" if use_dropout else "fully tracked",
         " ({} placements averaged)".format(len(DROPOUT_SEEDS)) if use_dropout else "",

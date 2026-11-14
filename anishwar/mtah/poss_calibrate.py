@@ -20,8 +20,8 @@ pm = harness.pm
 RANGES = {
     "TOUCH_R": np.arange(0.5, 3.01, 0.25),
     "MARGIN_M": np.arange(0.0, 1.51, 0.25),
-    "TURN_DEG": np.arange(10.0, 90.01, 10.0),
-    "JUMP_MS": np.arange(1.0, 8.01, 1.0),
+    "TURN_DEG": np.array([0.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]),
+    "JUMP_MS": np.arange(1.0, 14.01, 1.0),
     "CARRY_MS": np.arange(0.0, 6.01, 1.0),
     "GAP_FRAC": np.arange(0.0, 1.001, 0.25),
 }
@@ -80,8 +80,9 @@ def _seeds():
     sizes = [len(RANGES[k]) for k in KEYS]
     cols = [(rng.permutation(N_SEEDS) + rng.random(N_SEEDS)) / N_SEEDS for _ in KEYS]
     pts = [tuple(int(c[j] * n) for c, n in zip(cols, sizes)) for j in range(N_SEEDS)]
-    current = tuple(int(np.abs(RANGES[k] - possession.PARAMS[k]).argmin()) for k in KEYS)
-    return [current] + pts
+    # Only the fixed-seed points: the stored constants are never a starting point, so the search
+    # depends on the code and the IDSSE data alone and re-running it gives back what is stored.
+    return pts
 
 
 def _neighbours(idx, steps=STEPS):
@@ -112,11 +113,10 @@ def search(ev, matches):
 def run(match_ids=external.MATCHES):
     ev = Evaluator(match_ids)
     every = list(range(len(match_ids)))
-    held = []
-    for mi in every:
-        best, _ = search(ev, [j for j in every if j != mi])
-        held.append((match_ids[mi], ev.params(best), ev.scores(best)[mi]))
-    best, obj = search(ev, every)
+    sets = [[j for j in every if j != mi] for mi in every] + [every]
+    found = calibrate.fold_searches(search, ev, sets)
+    held = [(match_ids[mi], ev.params(found[mi][0]), ev.scores(found[mi][0])[mi]) for mi in every]
+    best, obj = found[-1]
     nb = np.array([ev.objective(n, every) for n in _neighbours(best, (-1, 1))])
     edges = [k for j, k in enumerate(KEYS) if best[j] in (0, len(RANGES[k]) - 1)]
     split = {}
@@ -129,8 +129,8 @@ def run(match_ids=external.MATCHES):
             "split": split, "evaluated": len(ev.cache), "all": ev.scores(best).mean(axis=0)}
 
 
-def report():
-    r = run()
+def report(r=None):
+    r = run() if r is None else r
     fmt = lambda p: " ".join("{}={:g}".format(k, v) for k, v in p.items())  # noqa: E731
     lines = ["possession, IDSSE end to end (our dead ball, ball hidden like ours); "
              "{} constant sets evaluated".format(r["evaluated"]), "",
@@ -237,9 +237,9 @@ def shape_run(match_ids=external.MATCHES):
             "acc": float(np.mean(acc)), "hold_acc": float(np.mean(hold_acc))}
 
 
-def shape_report():
+def shape_report(r=None):
     from . import shape
-    r = shape_run()
+    r = shape_run() if r is None else r
     lines = ["rule 6 (players' shape inside ball gaps), IDSSE end to end, nested leave-one-match-out",
              "  match    spellF1 (without)  macroF1 (without)   chosen"]
     for (mid, q, s), b in zip(r["held"], r["base"]):

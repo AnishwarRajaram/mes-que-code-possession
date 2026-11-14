@@ -34,22 +34,24 @@ NORM_WINDOW_S = 300     # local norm of the match tempo: 5 minutes, long against
 SMOOTH_S = 1.0          # players' speed smoothed over 1 s, the length of a stride cycle
 MAX_PLAYER_SPEED = 12.0  # faster than any sprinter: a tracking jump, not a player
 
-# Calibrated on the seven IDSSE matches with the ball hidden like ours (calibrate.py): best on all
-# seven, 21 of 22 one-step neighbours within 0.01, none at the edge of its range. Nested
-# leave-one-match-out: stoppage F1 0.749 +- 0.027, frame F1 0.863 +- 0.018. With the ball hidden
-# separately in dead and live play, rule 4 (inferred ball-out) was kept in five of seven folds.
+# Calibrated on the seven IDSSE matches with the ball hidden like ours (calibrate.py, which gives
+# back exactly these values, also after re-measuring the hiding profile with them): best on all
+# seven, 17 of 18 one-step neighbours within 0.01. Nested leave-one-match-out: stoppage F1
+# 0.756 +- 0.034, frame F1 0.865 +- 0.017. Every fold turned rule 4 (inferred ball-out) off, so
+# OUT_GAP_S has no effect; KO_MIN_S made no difference on IDSSE. Both sit at the bottom of their
+# ranges by the search's tie rule.
 PARAMS = {
-    "SLOW": 0.95,          # players at or below their usual pace ...
+    "SLOW": 1.0,           # players at or below their usual pace ...
     "RESUME": 1.15,        # ... and staying under 1.15x it ...
-    "MIN_STOP_S": 8.0,     # ... for 8 s is a stoppage
-    "START_BACK_S": -0.5,  # the stretch below RESUME already starts at the whistle, or just before
+    "MIN_STOP_S": 9.0,     # ... for 9 s is a stoppage
+    "START_BACK_S": -0.5,  # the stoppage starts 0.5 s into the stretch below RESUME
     "END_LEAD_S": 1.0,     # players speed up about 1 s before the restart is taken
     "OUT_LINK_S": 12.0,    # a ball-out belongs to the stoppage that starts within 12 s
     "OUT_MIN_S": 8.0,      # a ball-out with no stoppage after it is dead for 8 s
-    "OUT_NEAR_M": 1.0,     # inferred ball-out: last seen this close to a line (0 = rule off) ...
-    "OUT_GAP_S": 2.0,      # ... then unseen for this long
-    "KO_SHARE": 0.9,       # kick-off shape: share of each team in its own half (>1 = rule off)
-    "KO_MIN_S": 2.0,       # ... held this long
+    "OUT_NEAR_M": 0.0,     # inferred ball-out: last seen this close to a line (0 = rule off) ...
+    "OUT_GAP_S": 0.5,      # ... then unseen for this long
+    "KO_SHARE": 0.85,      # kick-off shape: share of each team in its own half (>1 = rule off)
+    "KO_MIN_S": 0.5,       # ... held this long
 }
 KO_CENTRE_M = 3.0          # a player this close to the centre spot (Law 8: the kicker is on it)
 LAST_SEEN_FRAMES = 3       # ball heading measured over the last 3 frames before it vanished
