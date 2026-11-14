@@ -49,7 +49,7 @@ downloaded from the dataset's public mirror (huggingface.co/datasets/pysport/ids
 python anishwar/pipeline.py cues            # dead-ball cues measured on the IDSSE matches
 python anishwar/pipeline.py calibrate       # fit the dead-ball rules, nested leave-one-match-out
 python anishwar/pipeline.py possession      # then the possession rules, on the stored dead-ball constants
-python anishwar/pipeline.py shape           # then rule 6 and the players' shape model
+python anishwar/pipeline.py changes         # then the change detector and the players' shape model
 python anishwar/pipeline.py challenger      # logistic regression challenger under the same test
 ```
 

@@ -106,13 +106,72 @@ def control_filter(codes, segment, fps, control_s=CONTROL_S):
     return out
 
 
-# Nested leave-one-match-out on IDSSE: spellF1 0.519 -> 0.531, macroF1 0.772 -> 0.781, better on
-# six of seven; folds chose 0.45 / 3 s (four) or 0.5 / 2 s (three). Averaging first (SMOOTH_S) added nothing.
+# Chosen with the change detector (changes.py) inside each fold of poss_calibrate.changes_shape_run:
+# every fold 0.45, held 4 s (five folds) or 2 s (two); 2 s on all seven. Averaging first (SMOOTH_S) added nothing.
 SHAPE = {
     "SWITCH_P": 0.45,   # inside a ball gap, the other team takes over when the players' shape says
-    "SWITCH_S": 3.0,   # so with this probability, held for this long (shape.py) ...
+    "SWITCH_S": 2.0,   # so with this probability, held for this long (shape.py) ...
     "SMOOTH_S": 0.0,   # ... after averaging the probability over this many seconds
 }
+
+
+def _gaps(codes, cues, dead):
+    """Live ball gaps of at least 1 s that start with a team in possession: (g0, g1, held, after)."""
+    fps = cues["fps"]
+    a, b = deadball.runs(~cues["ball_seen"] & ~dead)
+    out = []
+    for g0, g1 in zip(a, b):
+        if g1 - g0 < fps or g0 == 0 or codes[g0 - 1] not in (HOME, AWAY):
+            continue
+        after = codes[g1] if g1 < len(codes) and codes[g1] in (HOME, AWAY) else None
+        out.append((int(g0), int(g1), int(codes[g0 - 1]), after))
+    return out
+
+
+def viterbi_override(codes, cues, dead, p_home, q):
+    """Rule 6 as a two-state hidden Markov model. Inside each live ball gap of at least 1 s the
+    owner is the most likely sequence given the shape model: every frame adds its log-odds for
+    home (scaled to per second), every change of hands costs SWITCH_COST. The gap starts with the
+    team that held the ball before it and, when the touches after the gap show a team, ends with
+    that team. Plainly: the ball changes hands only where the players' shape argues for it by more
+    than SWITCH_COST log-odds seconds.
+
+    With d = score(home) - score(away), the recursion is d[t] = e[t] + clip(d[t-1], -c, c), so all
+    gaps are decoded together, one frame step at a time, with no loop over gaps."""
+    fps, lam = cues["fps"], q["SWITCH_COST"]
+    gaps = _gaps(codes, cues, dead)
+    out = codes.copy()
+    if not gaps:
+        return out
+    g0 = np.array([g[0] for g in gaps])
+    ln = np.array([g[1] - g[0] for g in gaps])
+    held = np.array([g[2] for g in gaps])
+    after = np.array([-1 if g[3] is None else g[3] for g in gaps])
+    T, G = int(ln.max()), len(gaps)
+    p = np.clip(p_home, 1e-4, 1 - 1e-4)
+    logit = np.log(p / (1 - p)) / fps
+    t_idx = np.arange(T)
+    valid = t_idx[None, :] < ln[:, None]
+    frames = np.minimum(g0[:, None] + t_idx[None, :], len(codes) - 1)
+    e = np.where(valid, logit[frames], 0.0)
+    d = np.empty((G, T))
+    prev = np.where(held == HOME, np.inf, -np.inf)          # state before the gap is fixed
+    for t in range(T):
+        d[:, t] = e[:, t] + np.clip(prev, -lam, lam)
+        prev = d[:, t]
+    last = d[np.arange(G), ln - 1]
+    state = np.where(after >= 0, after, np.where(last > 0, HOME, np.where(last < 0, AWAY, held)))
+    path = np.empty((G, T), np.int8)
+    for t in range(T - 1, 0, -1):                           # back from each gap's last frame
+        path[:, t] = state
+        dp = d[:, t - 1]
+        before = np.where(state == HOME, np.where(dp >= -lam, HOME, AWAY),
+                          np.where(dp <= lam, AWAY, HOME))
+        state = np.where(t < ln, before, state)             # frames past a gap's end: padding
+    path[:, 0] = state
+    for k in range(G):
+        out[g0[k]:g0[k] + ln[k]] = path[k, :ln[k]]
+    return out
 
 
 def shape_override(codes, cues, dead, p_home, q=SHAPE):
@@ -120,6 +179,8 @@ def shape_override(codes, cues, dead, p_home, q=SHAPE):
     holding the ball before the gap keeps it unless the shape model gives the other team at least
     SWITCH_P for SWITCH_S; if the touches after the gap already show a change, it is placed where
     the shape first turned (instead of GAP_FRAC)."""
+    if "SWITCH_COST" in q:
+        return viterbi_override(codes, cues, dead, p_home, q)
     fps = cues["fps"]
     out = codes.copy()
     a, b = deadball.runs(~cues["ball_seen"] & ~dead)

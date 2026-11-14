@@ -27,8 +27,19 @@ from . import challenger
 
 SMOOTH_S = 1.0
 PRIOR_FADE_S = 6.0
-NAMES = ("forward velocity", "forward position", "depth", "width", "in the other half",
-         "last owner (faded)", "last owner x forward velocity")
+MAX_SPEED = 12.0     # m/s, as in deadball.MAX_PLAYER_SPEED: faster is a tracking jump
+PRESS_R = 5.0        # opponents this close count as pressing (fixed in advance, not tuned)
+PRESS_CLIP_M = 20.0  # nearest-opponent distances beyond this carry no pressure information
+SHAPE_NAMES = ("forward velocity", "forward position", "depth", "width", "in the other half")
+PRESS_NAMES = ("pressers on most-pressed player", "nearest opponent to them",
+               "opponents closing on them")
+PRIOR_NAMES = ("last owner (faded)", "last owner x forward velocity")
+NAMES = SHAPE_NAMES + PRIOR_NAMES
+
+
+def names(n_inputs):
+    """Input names for a model with n_inputs columns (with or without the pressure features)."""
+    return SHAPE_NAMES + (PRESS_NAMES if n_inputs > len(NAMES) else ()) + PRIOR_NAMES
 
 
 def _smooth(a, fps):
@@ -72,6 +83,42 @@ def team_features(players_xy, team, pitch, fps, segment):
     return out
 
 
+def pressure_features(players_xy, team, fps, chunk=20000):
+    """(n, 3) home-minus-away pressure on each team's most-pressed player, from positions only.
+
+    Defenders close in on whoever has the ball, so the player under most pressure is a strong
+    hint of the owner even when the ball is not tracked. Per team and frame, the most-pressed
+    player is the one with most opponents within PRESS_R, ties going to the nearer opponent.
+    Features: that count, the distance to that player's nearest opponent (clipped at
+    PRESS_CLIP_M), and how fast that distance is shrinking (m/s)."""
+    n = len(players_xy)
+    xy = players_xy.astype(np.float64)
+    h, a = xy[:, team == 0], xy[:, team == 1]
+    near_h = np.full((n, h.shape[1]), np.inf)       # each home player's nearest away player
+    near_a = np.full((n, a.shape[1]), np.inf)
+    cnt_h = np.zeros((n, h.shape[1]))
+    cnt_a = np.zeros((n, a.shape[1]))
+    for s in range(0, n, chunk):
+        d = np.linalg.norm(h[s:s + chunk, :, None, :] - a[s:s + chunk, None, :, :], axis=-1)
+        d = np.where(np.isnan(d), np.inf, d)
+        near_h[s:s + chunk], near_a[s:s + chunk] = d.min(axis=2), d.min(axis=1)
+        cnt_h[s:s + chunk], cnt_a[s:s + chunk] = (d <= PRESS_R).sum(axis=2), (d <= PRESS_R).sum(axis=1)
+    per_team = []
+    rows = np.arange(n)
+    for near, cnt in ((near_h, cnt_h), (near_a, cnt_a)):
+        near = np.minimum(near, PRESS_CLIP_M)
+        closing = np.zeros_like(near)
+        closing[1:-1] = -(near[2:] - near[:-2]) * (fps / 2.0)
+        closing = np.clip(closing, -MAX_SPEED, MAX_SPEED)
+        pick = np.argmax(cnt - near / (PRESS_CLIP_M + 1.0), axis=1)   # most pressers, then nearest
+        per_team.append(np.column_stack([cnt[rows, pick], near[rows, pick], closing[rows, pick]]))
+    diff = per_team[0] - per_team[1]
+    out = np.zeros((n, 3), np.float32)
+    for j in range(3):
+        out[:, j] = _smooth(diff[:, j], fps)
+    return out
+
+
 def with_prior(feat, cues, fps):
     """Adds the last owner seen (+1 home, -1 away, 0 unknown), faded since the ball vanished, and
     its product with forward velocity. Uses the touches the possession rules already found."""
@@ -84,25 +131,27 @@ def with_prior(feat, cues, fps):
     return np.column_stack([feat, prior, prior * feat[:, 0]]).astype(np.float32)
 
 
-def inputs(cues, codes0):
-    """Model inputs: shape features plus the faded last owner from a first pass of the rules."""
+def inputs(cues, codes0, press=False):
+    """Model inputs: shape features (and, with press, the pressure features) plus the faded last
+    owner from a first pass of the rules."""
     seen = cues["ball_seen"]
     n = len(seen)
     val = np.where(codes0 == 0, 1.0, np.where(codes0 == 1, -1.0, 0.0))
     last = np.maximum.accumulate(np.where(seen, np.arange(n), -1))
     w = dict(cues)
     w["_last_owner"] = np.where(last >= 0, val[np.maximum(last, 0)], 0.0)
-    return with_prior(cues["shape"], w, cues["fps"])
+    feat = np.column_stack([cues["shape"], cues["press"]]) if press else cues["shape"]
+    return with_prior(feat, w, cues["fps"])
 
 
 # Fitted on all seven IDSSE matches (ball hidden like ours, three placements, live frames without
-# the ball, DFL owner as label, 5 frames a second): poss_calibrate.shape_fit reproduces it.
-# Order: mean, sd, then weights (bias first, then NAMES). Nested leave-one-match-out owner
-# accuracy 82.3% on live frames without the ball (holding the last owner: 73.8%).
+# the ball, DFL owner as label, 5 frames a second), on the change detector's first pass
+# (changes.py): poss_calibrate.changes_shape_run reproduces it. Order: mean, sd, then weights
+# (bias first, then NAMES).
 MODEL = (
-    np.array([0.0609231, 5.56144, 0.913096, 0.378204, 0.0502084, 0.0231276, 0.555781]),
-    np.array([3.56279, 34.6193, 8.08167, 5.57241, 0.312259, 0.558897, 1.85186]),
-    np.array([0.127889, 0.871699, -1.11073, 0.73234, 0.965864, 0.765355, 0.763894, 0.0933069]),
+    np.array([0.0609231, 5.56144, 0.913096, 0.378204, 0.0502084, 0.0266568, 0.590298]),
+    np.array([3.56279, 34.6193, 8.08167, 5.57241, 0.312259, 0.558744, 1.84112]),
+    np.array([0.118357, 0.849811, -1.10554, 0.73028, 0.953304, 0.766669, 0.818171, 0.0640403]),
 )
 
 

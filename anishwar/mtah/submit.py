@@ -1,9 +1,10 @@
 """Builds the submission file for the provided game from the tracking alone.
 
-    cues (deadball.build_cues) -> dead ball (deadball.detect) -> possession (possession.label)
-    -> players' shape inside ball gaps (shape.MODEL) -> possession again with rule 6
+    cues (deadball.build_cues) -> dead ball (deadball.detect) -> candidate changes judged by the
+    change model (changes.MODEL, THRESH) -> players' shape inside ball gaps (shape.MODEL) ->
+    possession again with rule 6 (possession.SHAPE)
 
-Every constant comes from deadball.PARAMS and possession.PARAMS, calibrated on other matches.
+Every constant comes from deadball, possession, changes and shape, calibrated on other matches.
 Graded frames get H, A or D (never X: on spellF1 an X costs what repeating the last label costs,
 and on macroF1 it is a miss); ungraded frames get X. Deterministic: the same data gives the same
 file, byte for byte.
@@ -14,15 +15,18 @@ import os
 
 import numpy as np
 
-from . import calibrate, config, deadball, harness, possession, shape
+from . import calibrate, changes, config, deadball, harness, possession, shape
 
 
 def codes():
     cues, graded = calibrate.our_cues()
     dead = deadball.detect(cues)
-    first = possession.label(cues, dead)
+    frames, teams, X = changes.candidates(cues, possession.ball_motion(cues))
+    p = changes.prob(changes.MODEL, X)
+    first = changes.label(cues, dead, frames, teams, p, changes.THRESH)
     p_home = shape.prob(shape.MODEL, shape.inputs(cues, first))
-    out = possession.label(cues, dead, p_home=p_home).astype(np.int8)  # 0 H, 1 A, 2 D
+    out = changes.label(cues, dead, frames, teams, p, changes.THRESH,
+                        p_home=p_home, q=possession.SHAPE).astype(np.int8)   # 0 H, 1 A, 2 D
     out[~graded] = harness.X
     return out
 

@@ -58,6 +58,7 @@ def our_cues():
     t = (team[on] == load.AWAY).astype(np.int8)
     c = deadball.build_cues(ball, players, config.PITCH, config.FPS, segment, t)
     c["shape"] = shape.team_features(players, t, config.PITCH, config.FPS, segment)
+    c["press"] = shape.pressure_features(players, t, config.FPS)
     return c, load.graded_mask(n)
 
 
@@ -67,6 +68,7 @@ def idsse_cues(match_id):
         with np.load(path) as z:
             c = {k: z[k] for k in z.files}
         c["fps"] = int(c["fps"])
+        c["press"] = idsse_press(match_id)
         return c
     m = external.load(match_id)
     c = deadball.build_cues(m["ball_xy"], m["players_xy"], tuple(m["pitch"]), 25, m["period"],
@@ -76,7 +78,20 @@ def idsse_cues(match_id):
     c["shape"] = shape.team_features(m["players_xy"], m["team"], tuple(m["pitch"]), 25,
                                      m["period"])
     np.savez_compressed(path, **c)
+    c["press"] = idsse_press(match_id)
     return c
+
+
+def idsse_press(match_id):
+    """shape.pressure_features for an IDSSE match, cached on its own beside the cues."""
+    path = os.path.join(external.ARRAYS_DIR, match_id + "_press1.npz")
+    if os.path.exists(path):
+        with np.load(path) as z:
+            return z["press"]
+    m = external.load(match_id)
+    press = shape.pressure_features(m["players_xy"], m["team"], 25)
+    np.savez_compressed(path, press=press)
+    return press
 
 
 class Evaluator:

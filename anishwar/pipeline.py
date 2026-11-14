@@ -9,12 +9,12 @@
     python anishwar/pipeline.py challenger      # logistic regression challenger, same test
     python anishwar/pipeline.py engine          # score engine: named evidence, learned points
     python anishwar/pipeline.py possession      # fit the possession rules on IDSSE, held out
-    python anishwar/pipeline.py shape           # fit rule 6 and the players' shape model on IDSSE
+    python anishwar/pipeline.py changes         # fit the change detector and rule 6 on IDSSE
     python anishwar/pipeline.py deadcheck       # dead-ball rules on our match, label-free checks
     python anishwar/pipeline.py run [--name N]  # build the submission file (results/N.csv)
     python anishwar/pipeline.py eval CSV...     # correctness check on the public window
 
-The constants are re-derived in order -- calibrate, then possession, then shape -- each stage on
+The constants are re-derived in order -- calibrate, then possession, then changes -- each stage on
 the constants stored by the one before it. The IDSSE commands take --workers N to search folds side
 by side (same result for any N).
 
@@ -161,17 +161,13 @@ def possession(_args):
     print(poss_calibrate.report())
 
 
-def shape(_args):
+def changes(_args):
     import warnings
 
     from mtah import poss_calibrate
 
     warnings.simplefilter("ignore", RuntimeWarning)
-    r = poss_calibrate.shape_run()
-    print(poss_calibrate.shape_report(r=r))
-    print("\nshape.MODEL (mean, sd, weights), as stored:")
-    for part in r["model"]:
-        print("    np.array([{}]),".format(", ".join("%g" % float("%.6g" % x) for x in part)))
+    print(poss_calibrate.changes_shape_report())
 
 
 def challenger(args):
@@ -261,7 +257,7 @@ def main():
                          help="fold searches side by side (default: MTAH_WORKERS or 1)")
         cmd.set_defaults(run=fn)
     for name, fn, text in (("possession", possession, "fit the possession rules on IDSSE"),
-                           ("shape", shape, "fit rule 6 and the players' shape model on IDSSE")):
+                           ("changes", changes, "fit the change detector and rule 6 on IDSSE")):
         cmd = commands.add_parser(name, help=text + ", nested leave-one-match-out")
         cmd.add_argument("--workers", type=int, default=0,
                          help="fold searches side by side (default: MTAH_WORKERS or 1)")

@@ -13,10 +13,10 @@ This document describes the method that produced the submission file `Mes Que Co
 The method has three stages:
 
 1. Dead-ball detection from the Laws of the Game and from player tempo.
-2. Possession while the ball is tracked, from touches and a control filter.
+2. Possession while the ball is tracked, from a learned change detector and a control filter.
 3. Possession while the ball is not tracked, from the shape of the two teams.
 
-Each stage is a short set of rules with named constants. Every tuned constant is calibrated on other matches that carry official labels. The remaining constants are fixed in advance from physics or from the challenge text and are listed in Section 5.4. No constant is calibrated against labels of the provided match.
+Each stage is a short set of rules or a small logistic model with named inputs. Every tuned constant and every model weight is calibrated on other matches that carry official labels. The remaining constants are fixed in advance from physics or from the challenge text and are listed in Section 5.4. No constant is calibrated against labels of the provided match.
 
 ## 2. Methodology
 
@@ -34,7 +34,7 @@ The method uses the provided match in three ways only:
 
 The team compared rules with learned models under the same test. A points-based score engine with sign-constrained weights scored below the rules. A logistic regression on the dead-ball cues scored above them on dead-ball measures, and Section 6 reports the comparison. Both learned models are harder to interpret than the rules.
 
-The method retains one learned component. A small logistic model reads possession from team shape when the ball is not tracked. It improves the score on six of the seven held-out matches, and its weights have a direct football reading.
+The method retains two learned components, both small logistic models whose weights have a direct football reading. The first judges whether a moment near the ball is a real change of possession (Section 5.2). It replaced a fixed touch rule and raised held-out spellF1 from 0.531 to 0.581, better on all seven matches. The second reads possession from team shape when the ball is not tracked (Section 5.3).
 
 ### 2.3 Evaluation Protocol
 
@@ -108,15 +108,16 @@ The rules follow Law 9 of the Laws of the Game. The ball is out of play when it 
 
 ### 5.2 Possession with the Ball Tracked
 
-1. **Touch.** A touch requires a player within 1.5 m of the ball, the nearest opponent at least 0.25 m further away, and a ball action. A ball action is a turn of at least 20 degrees or a speed change of at least 13 m/s.
-2. **Loose balls and challenges.** Possession stays with the team of the last touch through loose play, contested balls and frames without the ball. One team therefore holds possession at every live frame, as in the framework of Link and Hoernig [3].
-3. **Restarts.** The team of the first touch after a stoppage owns the restart. A live stretch with no touch goes to the team that did not hold the ball before the stoppage.
-4. **Hidden changes.** A change between touches of different teams across a ball gap is placed at the end of the gap.
-5. **Control.** A spell shorter than 2 seconds between two spells of the other team counts as a touch without control. Deflections, blocks and headers won without the ball fall in this case. The spell returns to the other team.
+1. **Candidate changes.** A candidate is a moment when the ball is tracked, a player is within 2.5 m of it, and the ball turns by at least 5 degrees or changes speed by at least 2 m/s. Consecutive candidate frames of one team form one candidate at its strongest frame. These limits are loose on purpose: on the labelled matches the candidates include 92.8% of the real changes made with the ball in view, against 78.0% for a fixed touch rule.
+2. **Change model.** A logistic model gives the probability that a candidate of the team without the ball is a real change of possession. Its inputs are taken from the side of the team that would take the ball: the turn and speed change, the ball speed before and after, the distance of that team's and the other team's nearest player, which team stays nearer the ball over the next one and two seconds and was nearer over the last second, how much of the next second the ball is unseen, the change in the two teams' forward velocity, and whether the fixed touch rule also fires. The touch rule requires a player within 1.5 m, the nearest opponent at least 0.25 m further away, and a turn of at least 20 degrees or a speed change of at least 13 m/s. The model is trained on candidates from the labelled matches, labelled by whether the DFL owner changes to that team within 0.4 seconds. A candidate with a probability of at least 0.3 changes hands. The strongest evidence for a real change is the taking team staying nearer the ball over the next two seconds, followed by the touch rule firing. A larger distance from the taking player counts against a change.
+3. **Loose balls and challenges.** Possession stays with the team of the last accepted change through loose play, contested balls and frames without the ball. One team therefore holds possession at every live frame, as in the framework of Link and Hoernig [3].
+4. **Restarts.** The team of the first candidate after a stoppage owns the restart. A live stretch with no candidate goes to the team that did not hold the ball before the stoppage.
+5. **Hidden changes.** A change across a ball gap is placed at the first accepted candidate after the gap, unless the team-shape model of Section 5.3 places it earlier.
+6. **Control.** A spell shorter than 2 seconds between two spells of the other team counts as a touch without control. Deflections, blocks and headers won without the ball fall in this case. The spell returns to the other team.
 
 ### 5.3 Possession with the Ball Not Tracked
 
-The team-shape model can transfer possession to the other team inside a gap in the ball tracking. The transfer requires a model probability of at least 0.45 for that team over 3 seconds. On held-out matches the model names the owner correctly on 82.3% of live frames without the ball. Holding the last owner names it correctly on 73.8%.
+The team-shape model can transfer possession to the other team inside a gap in the ball tracking. The transfer requires a model probability of at least 0.45 for that team over 2 seconds. With the touch rule as the first pass, the model named the owner correctly on 82.3% of held-out live frames without the ball, against 73.8% for holding the last owner. It is now fitted on the change detector's first pass.
 
 The model is a logistic regression on seven features. Each feature is the home value minus the away value:
 
@@ -143,6 +144,10 @@ The following constants are not tuned. Each follows from physics, from tracking 
 | Centre-spot radius | 3 m | Law 8 places the kicker on the centre spot; the radius allows for tracking error |
 | Ball direction window | 0.12 s each side | Long enough to suppress position jitter, short enough to isolate one touch |
 | Last-owner fade | 6 s | Prior on the last owner in the team-shape model |
+| Candidate radius | 2.5 m | Loose on purpose; about twice a player's reach |
+| Candidate turn and speed change | 5 degrees, 2 m/s | Loose on purpose; the change model judges each candidate |
+| Change label window | 0.4 s | A real change starts this close to the candidate |
+| Proximity clip | 10 m | Beyond this, being nearer the ball says nothing about possession |
 
 ## 6. Results
 
@@ -153,23 +158,26 @@ Table 4 reports the held-out scores on IDSSE under the hidden-ball condition.
 | Stage | Measure | Held-out score |
 |---|---|---|
 | Dead ball | Stoppage F1 / frame F1 | 0.756 / 0.865 |
-| Possession, rules in 5.2 | spellF1 / macroF1 | 0.513 / 0.770 |
-| Possession, rules in 5.2 and 5.3 | spellF1 / macroF1 | 0.531 / 0.781 |
+| Possession, fixed touch rule | spellF1 / macroF1 | 0.519 / 0.772 |
+| Possession, fixed touch rule and Section 5.3 | spellF1 / macroF1 | 0.531 / 0.781 |
+| Possession, change detector | spellF1 / macroF1 | 0.569 / 0.809 |
+| Possession, change detector and Section 5.3 (submitted) | spellF1 / macroF1 | 0.581 / 0.819 |
 
 The searches differ in how settled their results are:
 
 - **Dead ball.** 17 of 18 one-step neighbours score within 0.01 of the chosen setting. The slow-pace threshold sits at the top of its range. The inferred ball-out rule is off, which leaves its duration without effect, and the kick-off duration made no difference on the labelled matches; the tie rule puts both at the bottom of their ranges. Every fold chose the same stoppage start, ball-out link and ball-out duration; the folds differ only in the minimum stoppage length of 9 or 10 seconds and, in one fold, the slow-pace threshold and the kick-off share and duration.
 - **Search audit.** 200 further seed points with the best 20 refined, and 3,000 uniformly random grid points with the best 10 refined, found no setting above the chosen one. The best random point before refinement scored 0.804 against 0.818. By the rule of three, fewer than 0.11% of the grid would score higher, at 95% confidence.
-- **Possession rules.** All 10 one-step neighbours score within 0.01. The ball-at-the-feet rule sits at zero, which disables it, and the hidden-change position at the end of the gap; both are range limits. All seven folds chose a turn of 20 degrees and a change at the end of the gap. The folds chose speed changes from 11 to 14 m/s and touch radii from 1.5 to 2.25 m.
-- **Team shape.** Four folds chose a probability of 0.45 held for 3 seconds and three chose 0.5 held for 2 seconds.
+- **Fixed touch rule.** All 10 one-step neighbours score within 0.01. The ball-at-the-feet rule sits at zero, which disables it, and the hidden-change position at the end of the gap; both are range limits. All seven folds chose a turn of 20 degrees and a change at the end of the gap. The folds chose speed changes from 11 to 14 m/s and touch radii from 1.5 to 2.25 m.
+- **Change detector.** The folds chose a threshold of 0.25 or 0.3; on all seven matches it is 0.3. Every fold gains, by 0.031 to 0.060 spellF1 over the fixed touch rule with Section 5.3.
+- **Team shape.** With the change detector, every fold chose a probability of 0.45, held for 4 seconds in five folds and 2 seconds in two.
 
-Table 5 separates the remaining error by source. The figures use the rules in Section 5.2 without the team-shape model.
+Table 5 separates the remaining error by source. It was measured with the fixed touch rule, before the change detector, and without the team-shape model.
 
 **Table 5. Score with each error source removed, all seven matches**
 
 | Condition | spellF1 |
 |---|---|
-| Submitted pipeline, rules in 5.2 | 0.519 |
+| Fixed touch rule | 0.519 |
 | True dead ball | 0.655 |
 | Ball fully tracked | 0.654 |
 | True dead ball and ball fully tracked | 0.826 |
@@ -182,6 +190,9 @@ The team tested the following alternatives:
 - Three rules for the end of a stoppage gave no in-sample gain and a held-out stoppage F1 of 0.740, with less agreement between folds. They were rejected.
 - A ball-at-the-feet touch rule added false touches in duels.
 - Smoothing the team-shape probability gave no gain.
+- A per-frame owner model read ball proximity, ball speed, the touch rule and team shape, and decoded each live stretch with a two-state hidden Markov model. It named the owner correctly on 88.1% of held-out live frames against 82.3% for the touch rule, and raised macroF1 from 0.781 to 0.804. Held-out spellF1 fell from 0.531 to 0.512, worse on all seven matches. Its smoothed evidence merges short possessions, and spellF1 counts every possession equally regardless of length. This result led to the change detector, which judges changes rather than frames.
+- Three pressure features for each team's most-pressed player were added to the team-shape model: the number of opponents within 5 m, the distance to the nearest opponent, and how fast that distance shrinks. On their own they pick the owner with an AUC of 0.57 to 0.65. In the model they received weights between -0.06 and +0.10, and held-out spellF1 changed by -0.001, better on two of seven matches. Forward position, width and velocity already carry the same information.
+- A two-state hidden Markov model replaced the threshold rule of Section 5.3. Each frame adds the model's log-odds and each change of hands carries one calibrated cost. It matched the threshold rule with one constant instead of two: held-out spellF1 0.532 against 0.531, better on three of seven matches, with folds choosing costs from 0.25 to 1.5. It was not adopted.
 
 Table 6 compares the output on the provided match with norms from the labelled matches. These checks use no labels.
 
@@ -192,19 +203,19 @@ Table 6 compares the output on the provided match with norms from the labelled m
 | Dead share | 46.7% | 44.9% |
 | Stoppages per 90 minutes | 112 | 96 |
 | Median stoppage length | 20.6 s | 19.6 s |
-| Possessions per 90 minutes | 194 | 304 |
+| Possessions per 90 minutes | 223 | 304 |
 | Tagged set pieces inside a detected stoppage | 51 of 58 | Not applicable |
 
 ## 7. Limitations
 
 - **Quick restarts.** Throw-ins and goal kicks taken at full pace are missed when the tracking does not show the ball crossing the line.
-- **Possession count.** The method finds fewer possessions than the target. Changes inside long ball gaps remain the largest loss.
+- **Possession count.** The method finds fewer possessions than the target: 0.78 of the true count on the labelled matches. Changes missed with the ball in view were the largest loss before the change detector.
 - **Stoppage edges.** Errors in stoppage start and end times cost about 0.14 spellF1 on the labelled matches.
-- **Transfer.** The constants come from Bundesliga matches with corrected tracking. The hidden-ball profile matches the provided match, but player-tracking noise still differs between the sources.
+- **Transfer.** The constants and models come from Bundesliga matches with corrected tracking. The hidden-ball profile matches the provided match, but tracking noise still differs. On the provided match the nearest player is a median 1.05 m from the ball at a candidate, against 0.68 m on the labelled matches, and candidates are fewer: 31 per live minute against 82.
 
 Further work would address these limitations as follows:
 
-- A sequence model for possession inside long ball gaps.
+- Matching the ball and player tracking noise of the provided match on the labelled matches, as is already done for ball loss.
 - Restart detection from set-piece formations such as walls, corners and throw-in lines.
 - Calibration on labelled matches from further leagues.
 
@@ -224,7 +235,7 @@ The IDSSE matches are required only to re-derive the constants:
 ```bash
 python anishwar/pipeline.py calibrate
 python anishwar/pipeline.py possession
-python anishwar/pipeline.py shape
+python anishwar/pipeline.py changes
 python anishwar/pipeline.py deadcheck
 ```
 
