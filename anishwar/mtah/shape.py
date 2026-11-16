@@ -144,14 +144,14 @@ def inputs(cues, codes0, press=False):
     return with_prior(feat, w, cues["fps"])
 
 
-# Fitted on all seven IDSSE matches (ball hidden like ours, three placements, live frames without
-# the ball, DFL owner as label, 5 frames a second), on the change detector's first pass
-# (changes.py): poss_calibrate.changes_shape_run reproduces it. Order: mean, sd, then weights
-# (bias first, then NAMES).
+# Fitted on all seven IDSSE matches (smoothed like our tracking, ball hidden like ours, three
+# placements, live frames without the ball, DFL owner as label, 5 frames a second), on the change
+# detector's first pass (changes.py): poss_calibrate.changes_shape_run reproduces it. Order: mean,
+# sd, then weights (bias first, then NAMES).
 MODEL = (
-    np.array([0.0609231, 5.56144, 0.913096, 0.378204, 0.0502084, 0.0266568, 0.590298]),
-    np.array([3.56279, 34.6193, 8.08167, 5.57241, 0.312259, 0.558744, 1.84112]),
-    np.array([0.118357, 0.849811, -1.10554, 0.73028, 0.953304, 0.766669, 0.818171, 0.0640403]),
+    np.array([0.10349, 6.28007, 1.31246, 0.553315, 0.0531001, 0.0472813, 0.574993]),
+    np.array([3.52672, 34.2707, 8.12996, 5.49811, 0.309649, 0.545632, 1.80609]),
+    np.array([0.278661, 0.873143, -1.32478, 0.749537, 0.957446, 0.885292, 0.729753, 0.0268243]),
 )
 
 

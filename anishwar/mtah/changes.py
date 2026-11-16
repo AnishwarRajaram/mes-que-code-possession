@@ -107,14 +107,15 @@ def training_rows(frames, teams, X, gt, dead, fps):
     return X[keep], y[keep]
 
 
-# Fitted on all seven IDSSE matches (ball hidden like ours, three placements; our dead ball):
-# poss_calibrate.changes_shape_run reproduces it. Order: mean, sd, weights (bias, then NAMES).
-# Nested leave-one-match-out, with rule 6 on top: spellF1 0.581 against 0.531 for rules 1-4 and
-# rule 6, macroF1 0.819 against 0.781, better on all seven; folds chose THRESH 0.25 or 0.3.
+# Fitted on all seven IDSSE matches (smoothed like our tracking, ball hidden like ours, three
+# placements; our dead ball): poss_calibrate.changes_shape_run reproduces it. Order: mean, sd,
+# weights (bias, then NAMES). Nested leave-one-match-out, with rule 6 on top: spellF1
+# 0.548 +- 0.020, macroF1 0.813 +- 0.016; every fold chose THRESH 0.3. The constants fitted on
+# unsmoothed IDSSE scored 0.500 / 0.803 on these smoothed matches (worse on all seven).
 MODEL = (
-    np.array([41.779, 0.509873, 7.99703, 8.50693, 1.04728, 2.98636, 1.26911, 1.0418, 0.511552, 0.017208, 0.696851, 0.322239]),
-    np.array([52.2891, 5.89824, 6.04355, 6.9199, 0.668557, 2.31558, 2.35612, 2.45794, 2.39229, 0.0994551, 2.34394, 0.467341]),
-    np.array([-0.807398, 0.216517, -0.0727805, 0.0231983, -0.0417782, -0.446949, 0.174009, -0.438968, 0.700827, 0.0596658, 0.042374, 0.267308, 0.59395]),
+    np.array([28.5265, 1.37071, 7.29373, 8.66447, 1.32889, 2.60454, 0.940333, 0.662685, -0.258647, 0.0169229, 0.453106, 0.342699]),
+    np.array([38.9098, 2.944, 4.84823, 5.94004, 0.628074, 1.94037, 2.04631, 2.30443, 2.38455, 0.099885, 2.38799, 0.474602]),
+    np.array([-0.754401, 0.0809058, -0.130325, -0.127497, -0.16865, -0.314988, 0.434713, -0.312335, 0.622021, 0.281561, 0.0331712, 0.411921, 0.222203]),
 )
 THRESH = 0.3
 

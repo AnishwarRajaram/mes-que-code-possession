@@ -20,6 +20,7 @@ import multiprocessing
 import os
 
 import numpy as np
+import pandas as pd
 
 from . import config, deadball, external, load, shape
 
@@ -43,7 +44,26 @@ TOP_SEEDS = 20
 STEPS = (-2, -1, 1, 2)
 PLATEAU = 0.01
 CUES_VERSION = 5
+# Our automatic tracking is smoother than IDSSE's: frame-to-frame wobble (second difference, live
+# frames with the ball seen) is 1.20 / 3.81 cm (p50 / p90) for our ball against 2.34 / 7.75 cm,
+# and 0.20 / 0.54 cm for our players against 1.00 / 2.24 cm. A centred moving average applied
+# twice, of BALL_SMOOTH_K and PLAYER_SMOOTH_K frames, brings IDSSE to 0.75 / 3.68 and
+# 0.24 / 0.56 cm. The widths were chosen on that wobble alone (label-free; smoothing.py, which
+# gives back these widths); the candidate rate, which was not fitted, moved from 82 to 36 per live
+# minute (ours 27). Adopted: the whole chain
+# re-derived on smoothed IDSSE beat the constants fitted unsmoothed on all seven matches there,
+# and moved our match's dead share, stoppages and possessions towards IDSSE's.
+SMOOTH_IDSSE = True
+BALL_SMOOTH_K = 9
+PLAYER_SMOOTH_K = 3
 SEED = 0
+# A stored hiding profile (deadball.ball_gap_profile's aggregates), used in place of measuring our
+# match, so the IDSSE searches can run where our match is not available. None: measure it.
+PROFILE = None
+
+
+def hiding_profile():
+    return PROFILE if PROFILE is not None else deadball.ball_gap_profile(*our_cues())
 
 
 def our_cues():
@@ -62,8 +82,29 @@ def our_cues():
     return c, load.graded_mask(n)
 
 
+def smooth_track(a, k):
+    """Centred moving average of k frames, applied twice (a triangular kernel); NaN stays NaN."""
+    if k <= 1:
+        return a
+    df = pd.DataFrame(a.reshape(a.shape[0], -1))
+    out = df.rolling(k, center=True, min_periods=1).mean() \
+        .rolling(k, center=True, min_periods=1).mean().values.reshape(a.shape)
+    out[np.isnan(a)] = np.nan
+    return out.astype(a.dtype)
+
+
+def _idsse_tracks(m):
+    if not SMOOTH_IDSSE:
+        return m["ball_xy"], m["players_xy"]
+    return smooth_track(m["ball_xy"], BALL_SMOOTH_K), smooth_track(m["players_xy"], PLAYER_SMOOTH_K)
+
+
+def _tag():
+    return "s%d-%d" % (BALL_SMOOTH_K, PLAYER_SMOOTH_K) if SMOOTH_IDSSE else ""
+
+
 def idsse_cues(match_id):
-    path = os.path.join(external.ARRAYS_DIR, match_id + "_cues%d.npz" % CUES_VERSION)
+    path = os.path.join(external.ARRAYS_DIR, match_id + "_cues%d%s.npz" % (CUES_VERSION, _tag()))
     if os.path.exists(path):
         with np.load(path) as z:
             c = {k: z[k] for k in z.files}
@@ -71,12 +112,11 @@ def idsse_cues(match_id):
         c["press"] = idsse_press(match_id)
         return c
     m = external.load(match_id)
-    c = deadball.build_cues(m["ball_xy"], m["players_xy"], tuple(m["pitch"]), 25, m["period"],
-                            m["team"])
+    ball, players = _idsse_tracks(m)
+    c = deadball.build_cues(ball, players, tuple(m["pitch"]), 25, m["period"], m["team"])
     c["dead"] = ~m["alive"]
     c["owner"] = m["owner"]
-    c["shape"] = shape.team_features(m["players_xy"], m["team"], tuple(m["pitch"]), 25,
-                                     m["period"])
+    c["shape"] = shape.team_features(players, m["team"], tuple(m["pitch"]), 25, m["period"])
     np.savez_compressed(path, **c)
     c["press"] = idsse_press(match_id)
     return c
@@ -84,12 +124,12 @@ def idsse_cues(match_id):
 
 def idsse_press(match_id):
     """shape.pressure_features for an IDSSE match, cached on its own beside the cues."""
-    path = os.path.join(external.ARRAYS_DIR, match_id + "_press1.npz")
+    path = os.path.join(external.ARRAYS_DIR, match_id + "_press1%s.npz" % _tag())
     if os.path.exists(path):
         with np.load(path) as z:
             return z["press"]
     m = external.load(match_id)
-    press = shape.pressure_features(m["players_xy"], m["team"], 25)
+    press = shape.pressure_features(_idsse_tracks(m)[1], m["team"], 25)
     np.savez_compressed(path, press=press)
     return press
 
@@ -98,7 +138,7 @@ class Evaluator:
     """Per-match scores of a constants index vector, averaged over the dropout seeds, cached."""
 
     def __init__(self, match_ids, use_dropout):
-        self.profile = deadball.ball_gap_profile(*our_cues()) if use_dropout else None
+        self.profile = hiding_profile() if use_dropout else None
         self.variants = []                  # per match: list of cue dicts (one per seed)
         for i, mid in enumerate(match_ids):
             c = idsse_cues(mid)

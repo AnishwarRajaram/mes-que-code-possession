@@ -5,6 +5,7 @@
     python anishwar/pipeline.py features        # per-frame features, full-match summary
     python anishwar/pipeline.py census CSV...   # label-free plausibility checks of submissions
     python anishwar/pipeline.py cues            # dead-ball cues measured on other matches (IDSSE)
+    python anishwar/pipeline.py smoothing       # how much to smooth IDSSE to wobble like ours
     python anishwar/pipeline.py calibrate       # fit the dead-ball rules on IDSSE, held out
     python anishwar/pipeline.py challenger      # logistic regression challenger, same test
     python anishwar/pipeline.py engine          # score engine: named evidence, learned points
@@ -14,8 +15,8 @@
     python anishwar/pipeline.py run [--name N]  # build the submission file (results/N.csv)
     python anishwar/pipeline.py eval CSV...     # correctness check on the public window
 
-The constants are re-derived in order -- calibrate, then possession, then changes -- each stage on
-the constants stored by the one before it. The IDSSE commands take --workers N to search folds side
+The constants are re-derived in order -- smoothing, then calibrate, then possession, then changes --
+each stage on the constants stored by the one before it. The IDSSE commands take --workers N to search folds side
 by side (same result for any N).
 
 Every subcommand prints aggregates only -- never rows of tracking, tagging or labels -- so its
@@ -143,6 +144,15 @@ def cues(_args):
     print(cues_module.report())
 
 
+def smoothing(_args):
+    import warnings
+
+    from mtah import smoothing as smoothing_module
+
+    warnings.simplefilter("ignore", RuntimeWarning)
+    print(smoothing_module.report())
+
+
 def calibrate(args):
     import warnings
 
@@ -247,6 +257,8 @@ def main():
     census_cmd.set_defaults(run=census)
     commands.add_parser("cues", help="dead-ball cues measured on other matches (IDSSE)") \
         .set_defaults(run=cues)
+    commands.add_parser("smoothing", help="how much to smooth IDSSE to wobble like ours") \
+        .set_defaults(run=smoothing)
     for name, fn, text in (("calibrate", calibrate, "fit the dead-ball rules on IDSSE"),
                            ("challenger", challenger, "logistic challenger on IDSSE"),
                            ("engine", engine, "score engine (named evidence points) on IDSSE")):

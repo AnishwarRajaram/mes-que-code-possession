@@ -34,7 +34,7 @@ The method uses the provided match in three ways only:
 
 The team compared rules with learned models under the same test. A points-based score engine with sign-constrained weights scored below the rules. A logistic regression on the dead-ball cues scored above them on dead-ball measures, and Section 6 reports the comparison. Both learned models are harder to interpret than the rules.
 
-The method retains two learned components, both small logistic models whose weights have a direct football reading. The first judges whether a moment near the ball is a real change of possession (Section 5.2). It replaced a fixed touch rule and raised held-out spellF1 from 0.531 to 0.581, better on all seven matches. The second reads possession from team shape when the ball is not tracked (Section 5.3).
+The method retains two learned components, both small logistic models whose weights have a direct football reading. The first judges whether a moment near the ball is a real change of possession (Section 5.2). It replaced a fixed touch rule and raised held-out spellF1 from 0.531 to 0.581, better on all seven matches, in a comparison made before the tracking-noise matching of Section 4.4. The second reads possession from team shape when the ball is not tracked (Section 5.3).
 
 ### 2.3 Evaluation Protocol
 
@@ -42,7 +42,7 @@ All design decisions use nested leave-one-match-out validation on seven labelled
 
 - The search for each match uses the other six matches. The chosen constants are then scored once on the held-out match.
 - The search starts from spread-out seed points drawn by Latin hypercube sampling with a fixed random seed and refines them by coordinate ascent. The stored constants are never a starting point. Exact ties go to the smaller grid value, so a constant with no effect settles at the bottom of its range.
-- The dead-ball rules also set the ball-hiding profile of Section 4.3, so the dead-ball search is repeated with the profile re-measured until it returns its own input. It did so in the second round. Re-running the search therefore returns exactly the stored values.
+- The dead-ball rules also set the ball-hiding profile of Section 4.3, so the dead-ball search is repeated with the profile re-measured until it returns its own input. With the tracking-noise matching of Section 4.4 it did so in the third round. Re-running the search therefore returns exactly the stored values.
 - The final constants are the best setting on all seven matches. The search reports how many one-step neighbours score within 0.01 of it and which constants sit at the edge of their search range. Section 6 states both for each stage.
 - Possession is scored with the organisers' code in `evaluation/possession_metrics.py`.
 
@@ -90,10 +90,25 @@ The filter returns any spell shorter than two seconds that lies between two spel
 The ball is missing on 40.7% of the graded frames of the provided tracking. The loss follows a clear pattern:
 
 - The ball disappears in long gaps with a median length of 11.6 seconds.
-- It is missing on 63% of the frames that the dead-ball rules mark as dead and on 21% of the frames they mark as live.
+- It is missing on 65% of the frames that the dead-ball rules mark as dead and on 21% of the frames they mark as live.
 - It is missing more often in both states when players move slowly.
 
-This profile is the only statistic of the provided match that enters calibration. It is measured on the provided tracking alone, uses no labels and refers to no specific frame. The calibration hides the IDSSE ball to match the profile, separately in dead and live play, and averages over three random placements. After hiding, 63.3% of IDSSE dead frames and 21.3% of IDSSE live frames lack the ball. All results in this document use this hidden-ball condition.
+This profile is the only statistic of the provided match that enters calibration. It is measured on the provided tracking alone, uses no labels and refers to no specific frame. The calibration hides the IDSSE ball to match the profile, separately in dead and live play, and averages over three random placements. After hiding, 64.7% of IDSSE dead frames and 21.4% of IDSSE live frames lack the ball. All results in this document use this hidden-ball condition.
+
+### 4.4 Matching the Tracking Noise of the Provided Match
+
+The provided tracking is smoother than the IDSSE tracking. Frame-to-frame wobble is measured as the second difference of position on live frames with the ball tracked. For the ball it is 1.20 cm at the median and 3.81 cm at the 90th percentile, against 2.34 and 7.75 cm on IDSSE. For players it is 0.20 and 0.54 cm, against 1.00 and 2.24 cm.
+
+Before calibration, the IDSSE tracks are therefore smoothed with a centred moving average applied twice, of 9 frames for the ball and 3 frames for the players. The two widths were chosen on the wobble alone and use no labels. After smoothing, the IDSSE ball wobbles 0.75 and 3.68 cm and the players 0.24 and 0.56 cm.
+
+Measures that were not fitted show how far the smoothing makes IDSSE behave like the provided match. Each pair gives the IDSSE value before and after smoothing, with the provided match in brackets:
+
+- Change candidates per live minute (Section 5.2): 82 and 36 (27).
+- Speed change at a candidate, 75th percentile: 3.89 and 2.83 m/s (1.62 m/s).
+- Turn at a candidate, median: 12.2 and 14.0 degrees (13.6 degrees).
+- Distance from the nearest player to the ball, median: 1.49 and 1.57 m (2.15 m).
+
+All constants and models were re-derived on the smoothed matches. On those matches the re-derived method scores a held-out spellF1 of 0.548. The constants fitted on the unsmoothed matches score 0.500 there, and the re-derived ones are better on all seven matches. On the provided match the change moves the dead share, the stoppage count and the possession count towards the IDSSE norms (Table 6). The smoothing was adopted on both grounds. The smoothing does not explain the larger distance between players and ball, which remains a limitation (Section 7).
 
 ## 5. Labelling Rules
 
@@ -102,14 +117,14 @@ This profile is the only statistic of the provided match that enters calibration
 The rules follow Law 9 of the Laws of the Game. The ball is out of play when it wholly crosses a line or when the referee stops play.
 
 1. **Ball past a line.** The ball is dead from the frame it crosses the line.
-2. **Players stop.** Players at or below their usual pace for 9 seconds mark a stoppage. The usual pace is the local five-minute norm. The stoppage starts 0.5 seconds into the stretch below 1.15 times that pace and ends 1 second before the players accelerate for the restart.
+2. **Players stop.** Players at or below their usual pace for 10 seconds mark a stoppage. The usual pace is the local five-minute norm. The stoppage starts 0.5 seconds into the stretch below 1.15 times that pace and ends 1 second before the players accelerate for the restart.
 3. **Ball-out linking.** A ball-out joins any stoppage that starts within 12 seconds. A ball-out with no following stoppage is dead for 8 seconds. This case covers quick throw-ins.
 4. **Kick-off.** Law 8 places each team in its own half with the kicker on the centre spot. Each team at least 85% in its own half, with a player on the centre spot for half a second, marks a dead ball.
 
 ### 5.2 Possession with the Ball Tracked
 
-1. **Candidate changes.** A candidate is a moment when the ball is tracked, a player is within 2.5 m of it, and the ball turns by at least 5 degrees or changes speed by at least 2 m/s. Consecutive candidate frames of one team form one candidate at its strongest frame. These limits are loose on purpose: on the labelled matches the candidates include 92.8% of the real changes made with the ball in view, against 78.0% for a fixed touch rule.
-2. **Change model.** A logistic model gives the probability that a candidate of the team without the ball is a real change of possession. Its inputs are taken from the side of the team that would take the ball: the turn and speed change, the ball speed before and after, the distance of that team's and the other team's nearest player, which team stays nearer the ball over the next one and two seconds and was nearer over the last second, how much of the next second the ball is unseen, the change in the two teams' forward velocity, and whether the fixed touch rule also fires. The touch rule requires a player within 1.5 m, the nearest opponent at least 0.25 m further away, and a turn of at least 20 degrees or a speed change of at least 13 m/s. The model is trained on candidates from the labelled matches, labelled by whether the DFL owner changes to that team within 0.4 seconds. A candidate with a probability of at least 0.3 changes hands. The strongest evidence for a real change is the taking team staying nearer the ball over the next two seconds, followed by the touch rule firing. A larger distance from the taking player counts against a change.
+1. **Candidate changes.** A candidate is a moment when the ball is tracked, a player is within 2.5 m of it, and the ball turns by at least 5 degrees or changes speed by at least 2 m/s. Consecutive candidate frames of one team form one candidate at its strongest frame. These limits are loose on purpose: on the unsmoothed labelled matches the candidates include 92.8% of the real changes made with the ball in view, against 78.0% for a fixed touch rule.
+2. **Change model.** A logistic model gives the probability that a candidate of the team without the ball is a real change of possession. Its inputs are taken from the side of the team that would take the ball: the turn and speed change, the ball speed before and after, the distance of that team's and the other team's nearest player, which team stays nearer the ball over the next one and two seconds and was nearer over the last second, how much of the next second the ball is unseen, the change in the two teams' forward velocity, and whether the fixed touch rule also fires. The touch rule requires a player within 2.75 m and the nearest opponent at least 0.25 m further away. The ball must also turn by at least 20 degrees, change speed by at least 9 m/s, or move slower than 5 m/s at the player's feet. The model is trained on candidates from the labelled matches, labelled by whether the DFL owner changes to that team within 0.4 seconds. A candidate with a probability of at least 0.3 changes hands. The strongest evidence for a real change is the taking team staying nearer the ball over the next two seconds. Next come the other team's nearest player standing far from the ball and the taking team speeding up towards the goal it attacks. A larger distance from the taking player counts against a change.
 3. **Loose balls and challenges.** Possession stays with the team of the last accepted change through loose play, contested balls and frames without the ball. One team therefore holds possession at every live frame, as in the framework of Link and Hoernig [3].
 4. **Restarts.** The team of the first candidate after a stoppage owns the restart. A live stretch with no candidate goes to the team that did not hold the ball before the stoppage.
 5. **Hidden changes.** A change across a ball gap is placed at the first accepted candidate after the gap, unless the team-shape model of Section 5.3 places it earlier.
@@ -151,38 +166,40 @@ The following constants are not tuned. Each follows from physics, from tracking 
 
 ## 6. Results
 
-Table 4 reports the held-out scores on IDSSE under the hidden-ball condition.
+Table 4 reports the held-out scores on IDSSE under the hidden-ball condition, before and after the tracking-noise matching of Section 4.4.
 
 **Table 4. Nested leave-one-match-out results on IDSSE**
 
-| Stage | Measure | Held-out score |
-|---|---|---|
-| Dead ball | Stoppage F1 / frame F1 | 0.756 / 0.865 |
-| Possession, fixed touch rule | spellF1 / macroF1 | 0.519 / 0.772 |
-| Possession, fixed touch rule and Section 5.3 | spellF1 / macroF1 | 0.531 / 0.781 |
-| Possession, change detector | spellF1 / macroF1 | 0.569 / 0.809 |
-| Possession, change detector and Section 5.3 (submitted) | spellF1 / macroF1 | 0.581 / 0.819 |
+| Stage | Measure | Unsmoothed matches | Smoothed matches |
+|---|---|---|---|
+| Dead ball | Stoppage F1 / frame F1 | 0.756 / 0.865 | 0.767 / 0.871 |
+| Possession, fixed touch rule | spellF1 / macroF1 | 0.519 / 0.772 | 0.461 / 0.760 |
+| Possession, fixed touch rule and Section 5.3 | spellF1 / macroF1 | 0.531 / 0.781 | Not run |
+| Possession, change detector | spellF1 / macroF1 | 0.569 / 0.809 | Not run |
+| Possession, change detector and Section 5.3 | spellF1 / macroF1 | 0.581 / 0.819 | 0.548 / 0.813 (submitted) |
 
-The searches differ in how settled their results are:
+The two columns use different data and cannot be compared with each other. The smoothed matches behave more like the provided match (Section 4.4). On the smoothed matches, the constants fitted on the unsmoothed matches score 0.500 / 0.803 with the change detector and Section 5.3. The re-derived constants beat them on all seven matches, by 0.014 to 0.079 spellF1.
 
-- **Dead ball.** 17 of 18 one-step neighbours score within 0.01 of the chosen setting. The slow-pace threshold sits at the top of its range. The inferred ball-out rule is off, which leaves its duration without effect, and the kick-off duration made no difference on the labelled matches; the tie rule puts both at the bottom of their ranges. Every fold chose the same stoppage start, ball-out link and ball-out duration; the folds differ only in the minimum stoppage length of 9 or 10 seconds and, in one fold, the slow-pace threshold and the kick-off share and duration.
-- **Search audit.** 200 further seed points with the best 20 refined, and 3,000 uniformly random grid points with the best 10 refined, found no setting above the chosen one. The best random point before refinement scored 0.804 against 0.818. By the rule of three, fewer than 0.11% of the grid would score higher, at 95% confidence.
-- **Fixed touch rule.** All 10 one-step neighbours score within 0.01. The ball-at-the-feet rule sits at zero, which disables it, and the hidden-change position at the end of the gap; both are range limits. All seven folds chose a turn of 20 degrees and a change at the end of the gap. The folds chose speed changes from 11 to 14 m/s and touch radii from 1.5 to 2.25 m.
-- **Change detector.** The folds chose a threshold of 0.25 or 0.3; on all seven matches it is 0.3. Every fold gains, by 0.031 to 0.060 spellF1 over the fixed touch rule with Section 5.3.
-- **Team shape.** With the change detector, every fold chose a probability of 0.45, held for 4 seconds in five folds and 2 seconds in two.
+The searches on the smoothed matches differ in how settled their results are:
 
-Table 5 separates the remaining error by source. It was measured with the fixed touch rule, before the change detector, and without the team-shape model.
+- **Dead ball.** 16 of 18 one-step neighbours score within 0.01 of the chosen setting. The slow-pace threshold sits at the top of its range. The inferred ball-out rule is off, which leaves its duration without effect, and the kick-off duration made no difference on the labelled matches; the tie rule puts both at the bottom of their ranges. Four folds chose exactly the final setting. Of the other three, one changed the slow-pace threshold and the kick-off share and duration, one switched the inferred ball-out rule on, and one changed the stoppage start and the ball-out link.
+- **Search audit.** On the unsmoothed matches, 200 further seed points with the best 20 refined, and 3,000 uniformly random grid points with the best 10 refined, found no setting above the chosen one. The best random point before refinement scored 0.804 against 0.818. By the rule of three, fewer than 0.11% of the grid would score higher, at 95% confidence.
+- **Fixed touch rule.** All 12 one-step neighbours score within 0.01, and no constant sits at the edge of its range. The folds vary more than for the dead ball: touch radii of 2.5 to 3 m, turns of 5 to 20 degrees, speed changes of 8 to 14 m/s and ball-at-the-feet speeds of 0 to 5 m/s. In the submission the touch rule is only one input of the change model.
+- **Change detector.** Every fold chose a threshold of 0.3.
+- **Team shape.** Five folds chose a probability of 0.45 and two chose 0.5. Four folds held it for 2 seconds, two for 3 seconds and one for 4 seconds. On all seven matches the setting is 0.45 held for 2 seconds.
+
+Table 5 separates the remaining error by source. It was measured on the smoothed matches with the fixed touch rule, before the change detector and without the team-shape model, using the constants chosen on all seven matches.
 
 **Table 5. Score with each error source removed, all seven matches**
 
 | Condition | spellF1 |
 |---|---|
-| Fixed touch rule | 0.519 |
-| True dead ball | 0.655 |
-| Ball fully tracked | 0.654 |
-| True dead ball and ball fully tracked | 0.826 |
+| Fixed touch rule | 0.474 |
+| True dead ball | 0.572 |
+| Ball fully tracked | 0.581 |
+| True dead ball and ball fully tracked | 0.700 |
 
-The team tested the following alternatives:
+The team tested the following alternatives. All were tested on the unsmoothed matches, before the tracking-noise matching of Section 4.4:
 
 - A logistic regression on the dead-ball cues scored 0.762 in stoppage F1 and 0.881 in frame F1. Both scores exceed the rules, and frame F1 is higher on all seven matches. Its weights are harder to read than the rules. The end-to-end possession test decides between the two.
 - A score engine with sign-constrained evidence points scored 0.689 in stoppage F1 and 0.846 in frame F1. It remains a measuring tool. Sustained slow play and a recent ball-out carry almost all of its evidence.
@@ -200,22 +217,22 @@ Table 6 compares the output on the provided match with norms from the labelled m
 
 | Check | Provided match | IDSSE norm |
 |---|---|---|
-| Dead share | 46.7% | 44.9% |
-| Stoppages per 90 minutes | 112 | 96 |
-| Median stoppage length | 20.6 s | 19.6 s |
-| Possessions per 90 minutes | 223 | 304 |
+| Dead share | 44.9% | 44.9% |
+| Stoppages per 90 minutes | 105 | 96 |
+| Median stoppage length | 21.4 s | 19.6 s |
+| Possessions per 90 minutes | 258 | 304 |
 | Tagged set pieces inside a detected stoppage | 51 of 58 | Not applicable |
 
 ## 7. Limitations
 
 - **Quick restarts.** Throw-ins and goal kicks taken at full pace are missed when the tracking does not show the ball crossing the line.
-- **Possession count.** The method finds fewer possessions than the target: 0.78 of the true count on the labelled matches. Changes missed with the ball in view were the largest loss before the change detector.
-- **Stoppage edges.** Errors in stoppage start and end times cost about 0.14 spellF1 on the labelled matches.
-- **Transfer.** The constants and models come from Bundesliga matches with corrected tracking. The hidden-ball profile matches the provided match, but tracking noise still differs. On the provided match the nearest player is a median 1.05 m from the ball at a candidate, against 0.68 m on the labelled matches, and candidates are fewer: 31 per live minute against 82.
+- **Possession count.** The method finds fewer possessions than the labelled matches contain: 258 per 90 minutes on the provided match, against 304 on IDSSE. Changes missed with the ball in view were the largest loss before the change detector.
+- **Dead-ball errors.** Replacing the detected dead ball with the true one adds about 0.10 spellF1 on the labelled matches (Table 5).
+- **Transfer.** The constants and models come from Bundesliga matches. Their ball loss and tracking wobble are matched to the provided match (Sections 4.3 and 4.4), but differences remain. On the provided match the nearest player is a median 2.15 m from the ball, against 1.57 m on the smoothed labelled matches. Candidates are also fewer: 27 per live minute against 36.
 
 Further work would address these limitations as follows:
 
-- Matching the ball and player tracking noise of the provided match on the labelled matches, as is already done for ball loss.
+- Explaining the remaining gap in player-to-ball distance between the provided tracking and the labelled matches.
 - Restart detection from set-piece formations such as walls, corners and throw-in lines.
 - Calibration on labelled matches from further leagues.
 
@@ -233,13 +250,21 @@ The second command writes `anishwar/results/Mes Que Code.csv`. The build is dete
 The IDSSE matches are required only to re-derive the constants:
 
 ```bash
+python anishwar/pipeline.py smoothing
 python anishwar/pipeline.py calibrate
 python anishwar/pipeline.py possession
 python anishwar/pipeline.py changes
 python anishwar/pipeline.py deadcheck
 ```
 
-The commands run in this order. Each one prints the constants it finds; these are stored in the source before the next command runs, because each stage uses the constants of the stage before it.
+The commands run in this order. Each one prints the constants it finds; these are stored in the source before the next command runs, because each stage uses the constants of the stage before it. The `--workers N` option runs the searches for several folds side by side and gives the same result.
+
+The nested searches on the smoothed matches ran on a private Kaggle CPU notebook, under the same Python, numpy and pandas versions. The run read a bundle with the calibration code and the smoothed IDSSE arrays. From the provided match it contained only the aggregate ball-loss profile of Section 4.3. The dead-ball fixed point was found locally first. The folder `anishwar/offload/` holds the fixed-point script, the bundle builder and the notebook. Every Kaggle result was checked locally:
+
+- The dead-ball search on all seven matches returned the local fixed point.
+- The possession and change-detector results agreed to the last digit.
+
+The commands above give the same results on a single machine.
 
 ## References
 

@@ -32,17 +32,18 @@ HOME, AWAY, DEAD = 0, 1, 2
 CONTROL_S = 2.0
 TURN_FRAMES = 3      # ball direction compared over 0.12 s either side
 
-# Calibrated end to end on the seven IDSSE matches (poss_calibrate.py): our dead-ball rules, the
-# ball hidden like ours, official spellF1 (poss_calibrate.py gives back exactly these values). Best
-# on all seven, all 10 one-step neighbours within 0.01. Nested leave-one-match-out: spellF1
-# 0.513 +- 0.024, macroF1 0.770 +- 0.006.
+# Calibrated end to end on the seven IDSSE matches, smoothed like our tracking (poss_calibrate.py):
+# our dead-ball rules, the ball hidden like ours, official spellF1 (poss_calibrate.py gives back
+# exactly these values). Best on all seven, all 12 one-step neighbours within 0.01. Nested
+# leave-one-match-out, rules 1-4 alone: spellF1 0.461 +- 0.018, macroF1 0.760 +- 0.013. In the
+# submission the touch rule is one input of the change detector (changes.py); GAP_FRAC is unused there.
 PARAMS = {
-    "TOUCH_R": 1.5,     # a player within 1.5 m of the ball ...
+    "TOUCH_R": 2.75,    # a player within 2.75 m of the ball ...
     "MARGIN_M": 0.25,   # ... and the nearest opponent at least 0.25 m further away ...
     "TURN_DEG": 20.0,   # ... while the ball turns by 20 degrees or more ...
-    "JUMP_MS": 13.0,    # ... or changes speed by 13 m/s (a kick or a stop)
-    "CARRY_MS": 0.0,    # slow ball at the feet: rejected (0 = off), it adds false touches in duels
-    "GAP_FRAC": 1.0,    # a change hidden by a ball gap is placed at its end
+    "JUMP_MS": 9.0,     # ... or changes speed by 9 m/s (a kick or a stop) ...
+    "CARRY_MS": 5.0,    # ... or moves slower than 5 m/s (at the feet)
+    "GAP_FRAC": 0.75,   # a change hidden by a ball gap is placed 3/4 of the way through it
 }
 
 
@@ -107,7 +108,8 @@ def control_filter(codes, segment, fps, control_s=CONTROL_S):
 
 
 # Chosen with the change detector (changes.py) inside each fold of poss_calibrate.changes_shape_run:
-# every fold 0.45, held 4 s (five folds) or 2 s (two); 2 s on all seven. Averaging first (SMOOTH_S) added nothing.
+# 0.45 (five folds) or 0.5 (two), held 2 s (four), 3 s (two) or 4 s (one); 0.45 and 2 s on all
+# seven. Averaging first (SMOOTH_S) added nothing.
 SHAPE = {
     "SWITCH_P": 0.45,   # inside a ball gap, the other team takes over when the players' shape says
     "SWITCH_S": 2.0,   # so with this probability, held for this long (shape.py) ...

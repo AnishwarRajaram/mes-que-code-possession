@@ -1,7 +1,8 @@
 # anishwar/ — Mes Que Code possession pipeline
 
-Working folder for team Mes Que Code. Infrastructure only so far: loading, features, scoring and
-label-free checks. The possession rules are being rebuilt.
+Working folder for team Mes Que Code: the pipeline that builds our submission from the tactical
+tracking, and the calibration on other matches that sets its constants. The method is described
+in [Mes Que Code.md](Mes%20Que%20Code.md).
 
 ## Rules we work under
 
@@ -33,6 +34,8 @@ python anishwar/pipeline.py status          # environment, paths, which assets a
 python anishwar/pipeline.py cache           # parse the tactical tracking and tagging once
 python anishwar/pipeline.py features        # per-frame features, full-match summary
 python anishwar/pipeline.py census CSV...   # label-free plausibility checks
+python anishwar/pipeline.py deadcheck       # dead-ball rules on our match, label-free checks
+python anishwar/pipeline.py run             # build the submission (results/Mes Que Code.csv)
 python anishwar/pipeline.py eval CSV...     # correctness check on the public window
 ```
 
@@ -47,16 +50,21 @@ downloaded from the dataset's public mirror (huggingface.co/datasets/pysport/ids
 
 ```bash
 python anishwar/pipeline.py cues            # dead-ball cues measured on the IDSSE matches
+python anishwar/pipeline.py smoothing       # how much to smooth IDSSE to wobble like our tracking
 python anishwar/pipeline.py calibrate       # fit the dead-ball rules, nested leave-one-match-out
 python anishwar/pipeline.py possession      # then the possession rules, on the stored dead-ball constants
 python anishwar/pipeline.py changes         # then the change detector and the players' shape model
 python anishwar/pipeline.py challenger      # logistic regression challenger under the same test
 ```
 
-Before scoring, the IDSSE ball is hidden the way our tactical tracking loses it: in long gaps,
-more often while players are slow. That profile is measured on our tracking alone, with no
-labels. Each command runs single-threaded in under 1 GB of memory; `--workers 2` searches two
-folds at a time with an identical result.
+Before scoring, IDSSE is made to look like our tracking. Its tracks are smoothed until they wobble
+as little as ours, and its ball is hidden the way our tactical tracking loses it: in long gaps,
+more often while players are slow. Both are measured on our tracking alone, with no labels. Each
+command runs single-threaded; `--workers N` searches N folds at a time with an identical result.
+
+The nested searches were run once on a private Kaggle CPU notebook to free this machine;
+`offload/` holds the scripts and the notebook, and the doc's Section 8 says how the results were
+checked here.
 
 All output is aggregate-only. Everything the pipeline writes (`cache/`, `results/`, `eval_out/`)
 is gitignored, because it is derived from the match data.

@@ -34,16 +34,16 @@ NORM_WINDOW_S = 300     # local norm of the match tempo: 5 minutes, long against
 SMOOTH_S = 1.0          # players' speed smoothed over 1 s, the length of a stride cycle
 MAX_PLAYER_SPEED = 12.0  # faster than any sprinter: a tracking jump, not a player
 
-# Calibrated on the seven IDSSE matches with the ball hidden like ours (calibrate.py, which gives
-# back exactly these values, also after re-measuring the hiding profile with them): best on all
-# seven, 17 of 18 one-step neighbours within 0.01. Nested leave-one-match-out: stoppage F1
-# 0.756 +- 0.034, frame F1 0.865 +- 0.017. Every fold turned rule 4 (inferred ball-out) off, so
-# OUT_GAP_S has no effect; KO_MIN_S made no difference on IDSSE. Both sit at the bottom of their
-# ranges by the search's tie rule.
+# Calibrated on the seven IDSSE matches, smoothed like our tracking (calibrate.SMOOTH_IDSSE) and
+# with the ball hidden like ours (calibrate.py, which gives back exactly these values, also after
+# re-measuring the hiding profile with them): best on all seven, 16 of 18 one-step neighbours
+# within 0.01. Nested leave-one-match-out: stoppage F1 0.767 +- 0.030, frame F1 0.871 +- 0.019.
+# Six of seven folds turned rule 4 (inferred ball-out) off, so OUT_GAP_S has no effect; KO_MIN_S
+# made no difference on IDSSE. Both sit at the bottom of their ranges by the search's tie rule.
 PARAMS = {
     "SLOW": 1.0,           # players at or below their usual pace ...
     "RESUME": 1.15,        # ... and staying under 1.15x it ...
-    "MIN_STOP_S": 9.0,     # ... for 9 s is a stoppage
+    "MIN_STOP_S": 10.0,    # ... for 10 s is a stoppage
     "START_BACK_S": -0.5,  # the stoppage starts 0.5 s into the stretch below RESUME
     "END_LEAD_S": 1.0,     # players speed up about 1 s before the restart is taken
     "OUT_LINK_S": 12.0,    # a ball-out belongs to the stoppage that starts within 12 s

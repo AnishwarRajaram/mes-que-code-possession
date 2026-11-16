@@ -35,7 +35,7 @@ SEED = 0
 
 class Evaluator:
     def __init__(self, match_ids, use_dropout=True, true_dead=False):
-        profile = deadball.ball_gap_profile(*calibrate.our_cues()) if use_dropout else None
+        profile = calibrate.hiding_profile() if use_dropout else None
         self.items = []                          # per match: list of (cues, dead, motion, gt, runs)
         for i, mid in enumerate(match_ids):
             c = calibrate.idsse_cues(mid)
