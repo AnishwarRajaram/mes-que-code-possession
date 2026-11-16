@@ -201,6 +201,8 @@ Table 5 separates the remaining error by source. It was measured on the smoothed
 
 One alternative was tested on the smoothed matches. Rule 4 of Section 5.2 guesses the owner of a live stretch that has no candidate, or whose first candidate is below the threshold. On the labelled matches that guess names the wrong team over the first two seconds in 46% and 37% of such stretches, against 15% after a strong first candidate. Letting the team-shape model of Section 5.3 choose the owner instead, from its mean probability over the first two seconds, raised held-out spellF1 from 0.548 to 0.550, better on five of seven matches. The gain is far below the noise between matches, and the rule was not adopted.
 
+A second test moved the edges of each detected stoppage, with the offsets chosen inside each fold on the six training matches. Every fold kept the start and ended stoppages 1.5 seconds earlier, as expected: a stoppage that cuts into a possession costs more on spellF1 than a possession that runs into a stoppage. Held-out spellF1 rose by 0.006 on average, better on five of seven matches and worse on two. The gain is below the noise between matches and was not adopted. It suggests calibrating the dead-ball constants on spellF1 directly.
+
 The team tested the following alternatives on the unsmoothed matches, before the tracking-noise matching of Section 4.4:
 
 - A logistic regression on the dead-ball cues scored 0.762 in stoppage F1 and 0.881 in frame F1. Both scores exceed the rules, and frame F1 is higher on all seven matches. Its weights are harder to read than the rules. The end-to-end possession test decides between the two.
