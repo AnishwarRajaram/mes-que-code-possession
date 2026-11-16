@@ -199,7 +199,9 @@ Table 5 separates the remaining error by source. It was measured on the smoothed
 | Ball fully tracked | 0.581 |
 | True dead ball and ball fully tracked | 0.700 |
 
-The team tested the following alternatives. All were tested on the unsmoothed matches, before the tracking-noise matching of Section 4.4:
+One alternative was tested on the smoothed matches. Rule 4 of Section 5.2 guesses the owner of a live stretch that has no candidate, or whose first candidate is below the threshold. On the labelled matches that guess names the wrong team over the first two seconds in 46% and 37% of such stretches, against 15% after a strong first candidate. Letting the team-shape model of Section 5.3 choose the owner instead, from its mean probability over the first two seconds, raised held-out spellF1 from 0.548 to 0.550, better on five of seven matches. The gain is far below the noise between matches, and the rule was not adopted.
+
+The team tested the following alternatives on the unsmoothed matches, before the tracking-noise matching of Section 4.4:
 
 - A logistic regression on the dead-ball cues scored 0.762 in stoppage F1 and 0.881 in frame F1. Both scores exceed the rules, and frame F1 is higher on all seven matches. Its weights are harder to read than the rules. The end-to-end possession test decides between the two.
 - A score engine with sign-constrained evidence points scored 0.689 in stoppage F1 and 0.846 in frame F1. It remains a measuring tool. Sustained slow play and a recent ball-out carry almost all of its evidence.
@@ -227,7 +229,8 @@ Table 6 compares the output on the provided match with norms from the labelled m
 
 - **Quick restarts.** Throw-ins and goal kicks taken at full pace are missed when the tracking does not show the ball crossing the line.
 - **Possession count.** The method finds fewer possessions than the labelled matches contain: 258 per 90 minutes on the provided match, against 304 on IDSSE. Changes missed with the ball in view were the largest loss before the change detector.
-- **Dead-ball errors.** Replacing the detected dead ball with the true one adds about 0.10 spellF1 on the labelled matches (Table 5).
+- **Dead-ball errors.** Replacing the detected dead ball with the true one adds about 0.10 spellF1 on the labelled matches (Table 5). The dead-ball constants are calibrated on stoppage and frame F1, not on spellF1.
+- **Control convention.** The ground truth takes the owner the corrected tracking names, with nothing smoothed afterwards. The calibration target passes the DFL owner through the 2-second control filter of Section 4.2, which removes 108 of 412 possessions per 90 minutes on the labelled matches. The challenge text describes such a filter, and the 17 possessions stated for the public five minutes give about 306 per 90 minutes, close to the 304 that remain after it. If the ground truth keeps short possessions instead, removing the filter from the prediction would gain about 0.03 spellF1 on the labelled matches; if it does not, removing it would cost about 0.04. The filter was kept.
 - **Transfer.** The constants and models come from Bundesliga matches. Their ball loss and tracking wobble are matched to the provided match (Sections 4.3 and 4.4), but differences remain. On the provided match the nearest player is a median 2.15 m from the ball, against 1.57 m on the smoothed labelled matches. Candidates are also fewer: 27 per live minute against 36.
 
 Further work would address these limitations as follows:
