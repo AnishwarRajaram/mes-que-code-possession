@@ -1,70 +1,62 @@
-# anishwar/ — Mes Que Code possession pipeline
+# Mes Que Code: Possession Pipeline
 
-Working folder for team Mes Que Code: the pipeline that builds our submission from the tactical
-tracking, and the calibration on other matches that sets its constants. The method is described
-in [Mes Que Code.md](Mes%20Que%20Code.md).
+This folder holds the pipeline of team Mes Que Code for More than a Hack 2027, Phase 1. The pipeline builds the submission file from the automatic tactical tracking. The calibration on other matches sets its constants. The technical document [Mes Que Code.md](Mes%20Que%20Code.md) describes the method. The guide [AGENTS.md](AGENTS.md) describes how the work is conducted and reproduced.
 
-## Rules we work under
+## 1. Rules Observed
 
-From the organisers' [RULES.md](../RULES.md), [FAQ.md](../FAQ.md) and the terms of use:
+The pipeline follows the organisers' [RULES.md](../RULES.md), [FAQ.md](../FAQ.md) and terms of use:
 
-- Every label comes from an algorithm. No hand labels or hand corrections on the provided game,
-  for any purpose, including training or validation.
-- The public 5 minutes are a correctness check only. They are not training data and not a tuning
-  set, and they never choose between versions.
-- No human-produced data about the provided game from any source. Data about other matches,
-  including hand labels, is fine and is documented.
-- No rules or constants tied to specific frames of the provided game.
-- The match data never goes to a hosted AI, and nothing derived from it is committed.
+- Every label comes from an algorithm. No hand label or hand correction on the provided match is used for any purpose, including training and validation.
+- The public five-minute window serves as a correctness check only. It never trains, tunes or selects between versions.
+- No human-produced data about the provided match is used. Data about other matches is documented below.
+- No rule or constant refers to a specific frame of the provided match.
+- No match data goes to a hosted language model. Nothing derived from the match data is committed.
 
-## Setup
+## 2. Setup
 
-Tested with Python 3.12.8, numpy 1.26.3 and pandas 2.1.4.
+The pipeline is tested with Python 3.12.8, numpy 1.26.3, pandas 2.1.4 and kloppy 3.19.1.
 
 ```bash
 pip install -r anishwar/requirements.txt
 ```
 
-Data goes in the repository's `data/` folder (or `MTAH_DATA_DIR`), as in the root `DATA.md`.
+The provided data goes in the repository's `data/` folder, or in the folder named by `MTAH_DATA_DIR`, as described in the root `DATA.md`.
 
-## Commands
+## 3. Commands
 
 ```bash
-python anishwar/pipeline.py status          # environment, paths, which assets are present
+python anishwar/pipeline.py status          # environment, paths and assets present
 python anishwar/pipeline.py cache           # parse the tactical tracking and tagging once
-python anishwar/pipeline.py features        # per-frame features, full-match summary
+python anishwar/pipeline.py features        # per-frame features and a full-match summary
 python anishwar/pipeline.py census CSV...   # label-free plausibility checks
-python anishwar/pipeline.py deadcheck       # dead-ball rules on our match, label-free checks
-python anishwar/pipeline.py run             # build the submission (results/Mes Que Code.csv)
+python anishwar/pipeline.py deadcheck       # dead-ball rules on the provided match, label-free
+python anishwar/pipeline.py run             # build the submission, results/Mes Que Code.csv
 python anishwar/pipeline.py eval CSV...     # correctness check on the public window
 ```
 
-## Data from other matches
+The build is deterministic. It requires only the provided data and writes `anishwar/results/Mes Que Code.csv`.
 
-Calibration uses the IDSSE dataset: seven Bundesliga 2022/23 matches with official DFL position
-data and per-frame ball status and possession. Bassek, M., Rein, R., Weber, H. & Memmert, D.
-(2025). An integrated dataset of spatiotemporal and event data in elite soccer. *Scientific Data*
-12, 195. https://doi.org/10.1038/s41597-025-04505-y. Data © DFL, released under CC-BY 4.0. It is
-downloaded from the dataset's public mirror (huggingface.co/datasets/pysport/idsse-data) into
-`anishwar/external/idsse/` and read with kloppy; it is never committed.
+## 4. Data from Other Matches
+
+Calibration uses the IDSSE dataset: seven Bundesliga 2022/23 matches with official DFL position data and per-frame ball status and possession.
+
+Bassek, M., Rein, R., Weber, H. and Memmert, D. (2025). An integrated dataset of spatiotemporal and event data in elite soccer. *Scientific Data* 12, 195. https://doi.org/10.1038/s41597-025-04505-y. Data © DFL, released under CC-BY 4.0.
+
+The data is downloaded from the public mirror huggingface.co/datasets/pysport/idsse-data into `anishwar/external/idsse/` and read with kloppy. It is never committed. The following commands re-derive the constants in order:
 
 ```bash
 python anishwar/pipeline.py cues            # dead-ball cues measured on the IDSSE matches
-python anishwar/pipeline.py smoothing       # how much to smooth IDSSE to wobble like our tracking
-python anishwar/pipeline.py calibrate       # fit the dead-ball rules, nested leave-one-match-out
-python anishwar/pipeline.py possession      # then the possession rules, on the stored dead-ball constants
-python anishwar/pipeline.py changes         # then the change detector and the players' shape model
-python anishwar/pipeline.py challenger      # logistic regression challenger under the same test
+python anishwar/pipeline.py smoothing       # smoothing that matches the provided tracking's wobble
+python anishwar/pipeline.py calibrate       # dead-ball rules, nested leave-one-match-out
+python anishwar/pipeline.py possession      # possession rules on the stored dead-ball constants
+python anishwar/pipeline.py changes         # change detector and team-shape model
+python anishwar/pipeline.py challenger      # logistic challenger under the same test
 ```
 
-Before scoring, IDSSE is made to look like our tracking. Its tracks are smoothed until they wobble
-as little as ours, and its ball is hidden the way our tactical tracking loses it: in long gaps,
-more often while players are slow. Both are measured on our tracking alone, with no labels. Each
-command runs single-threaded; `--workers N` searches N folds at a time with an identical result.
+Before scoring, the IDSSE tracking is adjusted to resemble the provided tracking. Its tracks are smoothed until their frame-to-frame wobble matches. Its ball is hidden in the pattern measured on the provided tracking: long gaps, more often while players are slow. Both adjustments are measured on the provided tracking alone, without labels. Each command runs single-threaded by default. The option `--workers N` searches N folds side by side with an identical result.
 
-The nested searches were run once on a private Kaggle CPU notebook to free this machine;
-`offload/` holds the scripts and the notebook, and the doc's Section 8 says how the results were
-checked here.
+The nested searches ran once on a private cloud CPU notebook. The folder `offload/` holds the scripts and the notebook. Section 8 of the technical document describes how the results were verified locally.
 
-All output is aggregate-only. Everything the pipeline writes (`cache/`, `results/`, `eval_out/`)
-is gitignored, because it is derived from the match data.
+## 5. Outputs
+
+Every command prints aggregates only. Everything the pipeline writes (`cache/`, `results/`, `eval_out/`) is excluded from version control because it derives from the match data.

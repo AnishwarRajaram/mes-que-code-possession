@@ -19,7 +19,7 @@ The user decides. An agent proposes, measures and implements on instruction.
 1. **Plan before code.** An agent discusses a change with the user first. It writes code only after an explicit instruction to proceed.
 2. **Small modules.** An agent implements one module at a time and stops for review after each.
 3. **Commits.** An agent commits and pushes only when the user asks. Commit messages carry no attribution lines and no tool credits.
-4. **Branches.** Work happens on `rush`. The branch `main` mirrors `rush` by fast-forward push only. Branches of other team members are never modified.
+4. **Branches.** The branch `main` holds the submission. Further work happens on a branch cut from the tag `phase1-submission`. It reaches `main` only after the release check of Section 5.4 and the user's approval.
 5. **Workspace.** An agent creates, edits and deletes files only inside `anishwar/`. Temporary files go to the agent's own scratch directory.
 6. **Deletion and reversal.** Before any deletion or revert, the agent lists exactly what will be removed and waits for confirmation.
 7. **Other agents.** A research agent working beside the main agent writes only its own report file. It does not edit code, run git commands or read the match data. Any code change it makes is reverted.
@@ -46,11 +46,20 @@ Agents observe three further working rules:
 - **Aggregates only.** Every printed output is an aggregate. No command prints rows of tracking, tagging, labels or homography.
 - **Upstream rules first.** Before a decision that depends on the rules, the agent checks the organisers' upstream repository for changes.
 
+### 3.1 Generalisation Principle
+
+The goal is a method that labels any professional match as well as the constraints allow. The provided match is one draw from that population. It is never a target to fit.
+
+- A cue, rule or constant is admissible when it reflects how football is played or how tracking behaves in general: the Laws of the Game, restart procedures, player tempo, ball physics, tracking noise.
+- An agent does not search for properties peculiar to the provided match or to any single calibration match. A variance that appears in one match only is noise for this purpose.
+- Where a domain is too narrow to support a general conclusion, the agent records that limit and leaves the method unchanged.
+- Additional labelled matches from other leagues and providers serve to test this generality. A change is preferred when it holds across matches and sources, not when it raises the score of one.
+
 ## 4. Privacy
 
 - No personal detail of any team member appears in a request to an external service, in a commit or in a public file.
 - External compute is used only through the team member's own private account. Uploads hold the minimum needed to reproduce a result.
-- The single external offload so far used a private notebook. Its bundle held the calibration code with comments removed, the seven smoothed IDSSE cue arrays under neutral names and one aggregate statistic of the provided match: the ball-loss profile of Section 4.3 of the technical document. It held no frame, position or label of the provided match.
+- The external offloads used private notebooks. Their bundles held the calibration code with comments removed, the seven smoothed IDSSE cue arrays under neutral names and one aggregate statistic of the provided match: the ball-loss profile of Section 4.3 of the technical document. They held no frame, position or label of the provided match.
 - Third-party libraries are verified before use. Every installed wheel matched its PyPI SHA-256 digest. Remote installs pin each wheel by hash.
 
 ## 5. Reproduction
@@ -97,7 +106,7 @@ A release requires all of the following:
 
 ## 6. State of the Method
 
-The frozen submission is the tag `phase1-freeze`. The branches `rush` and `main` hold it. Exploratory work happens on the branch `explore`, which starts from the tag. The method has three stages:
+The submission is the tag `phase1-submission` on `main`. The method has three stages:
 
 1. Dead-ball rules from the Laws of the Game and player tempo (`mtah/deadball.py`).
 2. A learned change detector judges candidate changes of possession with the ball in view (`mtah/changes.py`).
@@ -152,19 +161,21 @@ Each direction below was tested by nested leave-one-match-out on IDSSE. A direct
 | Stoppage ends moved 1.5 s earlier | +0.006, 5 of 7 | Rejected, direction noted |
 | Prediction without the control filter | +0.028 against a raw target, -0.042 against a filtered target | Rejected on the convention evidence |
 | Random offset between ball and players | Not tried | Rejected as a poor generalisation |
+| Stoppage edges and lone ball-out length chosen on spellF1 | Below the paired test when every stage was nested | Rejected |
+| Touch radius searched up to 4.5 m | No gain when every stage was nested | Rejected |
 
 ## 9. Open Directions
 
-The following directions are ranked by expected value. None is part of the frozen submission.
+The following directions are ranked by expected value. None is part of the submission.
 
-1. **Dead-ball constants calibrated on spellF1.** The stoppage-edge test points the same way. The end-of-stoppage and ball-out constants are the first candidates. The full chain then runs again.
+1. **A second labelled source.** Labelled matches from other providers test whether the IDSSE choices generalise. Each source is used under its own licence. Data that may not be redistributed stays on private compute, and only aggregates are reported.
 2. **Restart detection from set-piece formations.** Walls, corner set-ups and throw-in lines mark stoppages that tempo alone misses.
 3. **The remaining player-to-ball distance gap.** A label-free explanation is required before any correction.
 4. **Calibrated change probabilities and metric-aware decoding.** Minimum Bayes risk decoding over the change candidates follows from the identity in Section 7.
 
 ## 10. Procedure for Further Work
 
-1. Work on `explore` or on a branch cut from `phase1-freeze`. The tag stays the reference. Changes reach `rush` and `main` only after the release check of Section 5.4 and the user's approval.
+1. Work on a branch cut from `phase1-submission`. The tag stays the reference. Changes reach `main` only after the release check of Section 5.4 and the user's approval.
 2. State the test and its adoption rule before running it. Run it once. Record the result in the technical document whether or not it is adopted.
 3. Use nested leave-one-match-out on IDSSE for every decision. Never use the public window or the provided match to choose.
 4. Rebuild the submission, validate it and repeat the clean-clone check before any release.
