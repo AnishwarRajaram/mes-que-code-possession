@@ -1,3 +1,25 @@
+# Submission of Team Més Que Code
+
+This repository holds the Phase 1 submission of team Més Que Code. The organisers' challenge description follows below, unchanged.
+
+| Item | Location |
+|---|---|
+| Pipeline and instructions | [anishwar/README.md](anishwar/README.md) |
+| Technical document | [anishwar/Més Que Code.md](anishwar/M%C3%A9s%20Que%20Code.md) |
+| Operating guide for reviewers | [anishwar/AGENTS.md](anishwar/AGENTS.md) |
+| Submitted version | Tag `phase1-submission` |
+
+The submission file is rebuilt from the provided data with one command. The build is deterministic and gives SHA-256 prefix `fd7772e5d0724532`.
+
+```bash
+pip install -r anishwar/requirements.txt
+python anishwar/pipeline.py run
+```
+
+The match data and every file derived from it are excluded from the repository, as the rules require.
+
+---
+
 # More than a Hack 2027 — Phase 1: Ball Possession
 
 **Organised by [Metrica Sports](https://metrica-sports.com), [FC Barcelona](https://www.fcbarcelona.com)
