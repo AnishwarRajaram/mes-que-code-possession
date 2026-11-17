@@ -7,9 +7,9 @@ This repository holds the Phase 1 submission of team Més Que Code. The organise
 | Pipeline and instructions | [anishwar/README.md](anishwar/README.md) |
 | Technical document | [anishwar/Més Que Code.md](anishwar/M%C3%A9s%20Que%20Code.md) |
 | Operating guide for reviewers | [anishwar/AGENTS.md](anishwar/AGENTS.md) |
-| Submitted version | Tag `phase1-submission` |
+| Submitted version | Tag `phase1-submission-r2`. The tag `phase1-submission` marks the first version, without the broadcast camera rule |
 
-The submission file is rebuilt from the provided data with one command. The build is deterministic and gives SHA-256 prefix `fd7772e5d0724532`.
+The submission file is rebuilt from the provided data with one command. The build is deterministic and gives SHA-256 prefix `e829b947f1513dfb`.
 
 ```bash
 pip install -r anishwar/requirements.txt

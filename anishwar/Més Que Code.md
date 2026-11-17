@@ -8,11 +8,11 @@
 
 ## 1. Introduction
 
-This document describes the method that produced the submission file `Més Que Code.csv`. The method labels every graded frame of the provided match as home possession, away possession or dead ball. Its only input is the automatic tactical tracking.
+This document describes the method that produced the submission file `Més Que Code.csv`. The method labels every graded frame of the provided match as home possession, away possession or dead ball. Its main input is the automatic tactical tracking. One dead-ball rule also reads the broadcast tracking and homography.
 
 The method has three stages:
 
-1. Dead-ball detection from the Laws of the Game and from player tempo.
+1. Dead-ball detection from the Laws of the Game, from player tempo and from the broadcast camera.
 2. Possession while the ball is tracked, from a learned change detector and a control filter.
 3. Possession while the ball is not tracked, from the shape of the two teams.
 
@@ -45,6 +45,7 @@ All design decisions use nested leave-one-match-out validation on seven labelled
 - The dead-ball rules also set the ball-hiding profile of Section 4.3, so the dead-ball search is repeated with the profile re-measured until it returns its own input. With the tracking-noise matching of Section 4.4 it did so in the third round. Re-running the search therefore returns exactly the stored values.
 - The final constants are the best setting on all seven matches. The search reports how many one-step neighbours score within 0.01 of it and which constants sit at the edge of their search range. Section 6 states both for each stage.
 - Possession is scored with the organisers' code in `evaluation/possession_metrics.py`.
+- The broadcast camera rule of Section 5.1 cannot be tested on IDSSE, which has no broadcast feed. It follows the same nested protocol on eight PFF FC matches and is checked on seven SkillCorner matches (Section 4.5).
 
 ## 3. Assets
 
@@ -57,13 +58,14 @@ Table 1 lists each provided asset and its use.
 | Tactical tracking of players and ball | Used | The only input to the labels |
 | Smart Tagging | Checks only | Automatic tagging supplied by the organisers. It counts tagged set pieces inside detected stoppages and guided which failure cases the team studied. It is never an input and never selects a version |
 | Tactical and broadcast video | Viewing only | Viewed to understand the match and to design cues. No viewing produced a label, a correction or a constant |
-| Broadcast tracking | Not used | The tactical view covers the whole pitch, so one source suffices |
-| Homography | Not used | The tracking is already in pitch coordinates |
+| Broadcast tracking | Used | Player and ball positions synchronise the broadcast with the tactical frames (Section 5.1) |
+| Broadcast homography | Used | Frames without a valid homography mark the camera off the pitch (Section 5.1) |
+| Tactical homography | Not used | The tactical tracking is already in pitch coordinates |
 | Public five-minute ground truth | Correctness only | Confirms frame alignment and label meaning |
 
 ## 4. Training Data
 
-The method uses no label from the provided match. All labelled data comes from the IDSSE dataset.
+The method uses no label from the provided match. The labelled data comes from the IDSSE dataset and, for the broadcast camera rule only, from PFF FC and SkillCorner (Section 4.5, Table 3).
 
 ### 4.1 IDSSE Dataset
 
@@ -108,7 +110,24 @@ Measures that were not fitted show how far the smoothing makes IDSSE behave like
 - Turn at a candidate, median: 12.2 and 14.0 degrees (13.6 degrees).
 - Distance from the nearest player to the ball, median: 1.49 and 1.57 m (2.15 m).
 
-All constants and models were re-derived on the smoothed matches. On those matches the re-derived method scores a held-out spellF1 of 0.548. The constants fitted on the unsmoothed matches score 0.500 there, and the re-derived ones are better on all seven matches. On the provided match the change moves the dead share, the stoppage count and the possession count towards the IDSSE norms (Table 6). The smoothing was adopted on both grounds. The smoothing does not explain the larger distance between players and ball, which remains a limitation (Section 7).
+All constants and models were re-derived on the smoothed matches. On those matches the re-derived method scores a held-out spellF1 of 0.548. The constants fitted on the unsmoothed matches score 0.500 there, and the re-derived ones are better on all seven matches. On the provided match the change moves the dead share, the stoppage count and the possession count towards the IDSSE norms (Table 7). The smoothing was adopted on both grounds. The smoothing does not explain the larger distance between players and ball, which remains a limitation (Section 7).
+
+### 4.5 Labelled Broadcast Data
+
+Broadcasts cut to replays, close-ups and crowd shots mostly while the ball is dead. This is a convention of television production and not a feature of one match. Two public sources of broadcast-derived tracking carry labels and test a rule built on it.
+
+**Table 3. Labelled broadcast data used for the camera rule**
+
+| Property | PFF FC World Cup 2022 | SkillCorner open data |
+|---|---|---|
+| Matches | 8 | 7 |
+| Tracking | Broadcast-derived, 29.97 frames per second, resampled to 25 | Broadcast-derived, 10 frames per second |
+| Camera off the pitch | At least 90% of players estimated rather than seen | At most 2 players detected |
+| Dead ball | From the PFF events: a ball-out, a period end or a foul until the next set piece | Frames outside every possession phase |
+| Use | Nested leave-one-match-out choice of the rule's constants | Precision of the chosen rule |
+| Licence | Released on request under PFF FC terms, without redistribution. Processed locally; nothing derived is published | MIT licence, credit SkillCorner |
+
+Both off-pitch definitions were fixed before any scoring. They follow the provided broadcast, which tracks a median of 2 players on frames without a valid homography.
 
 ## 5. Labelling Rules
 
@@ -120,6 +139,9 @@ The rules follow Law 9 of the Laws of the Game. The ball is out of play when it 
 2. **Players stop.** Players at or below their usual pace for 10 seconds mark a stoppage. The usual pace is the local five-minute norm. The stoppage starts 0.5 seconds into the stretch below 1.15 times that pace and ends 1 second before the players accelerate for the restart.
 3. **Ball-out linking.** A ball-out joins any stoppage that starts within 12 seconds. A ball-out with no following stoppage is dead for 8 seconds. This case covers quick throw-ins.
 4. **Kick-off.** Law 8 places each team in its own half with the kicker on the centre spot. Each team at least 85% in its own half, with a player on the centre spot for half a second, marks a dead ball.
+5. **Camera off the pitch.** Every stretch of at least 8 seconds in which the broadcast camera shows no pitch is dead. The rule only adds dead ball. The 8 seconds were chosen in every fold of the nested PFF test, and no tempo condition improved on the rule alone.
+
+The broadcast runs on its own timeline. It is synchronised with the tactical frames by matching the ball, then the players, in pitch coordinates over 30-second chunks. Two segments result, one per half, with a fixed offset each and a drift below 0.1 seconds per hour. On confidently matched chunks the players agree to a median 0.33 m. The synchronised cue covers 96.4% of the graded frames. Broadcast frames with a valid homography whose players match nothing in the tactical frame at that moment are replays and do not count as on the pitch.
 
 ### 5.2 Possession with the Ball Tracked
 
@@ -148,7 +170,7 @@ The features use medians and interquartile ranges because stray tracks in the au
 
 The following constants are not tuned. Each follows from physics, from tracking practice or from the challenge text.
 
-**Table 3. Fixed constants**
+**Table 4. Fixed constants**
 
 | Constant | Value | Basis |
 |---|---|---|
@@ -163,12 +185,14 @@ The following constants are not tuned. Each follows from physics, from tracking 
 | Candidate turn and speed change | 5 degrees, 2 m/s | Loose on purpose; the change model judges each candidate |
 | Change label window | 0.4 s | A real change starts this close to the candidate |
 | Proximity clip | 10 m | Beyond this, being nearer the ball says nothing about possession |
+| Broadcast chunk | 30 s | Long enough for a unique ball trajectory, short enough to follow a cut |
+| Replay mismatch | 3 m | Median distance to the nearest tactical player above which a broadcast frame shows another moment |
 
 ## 6. Results
 
-Table 4 reports the held-out scores on IDSSE under the hidden-ball condition, before and after the tracking-noise matching of Section 4.4.
+Table 5 reports the held-out scores on IDSSE under the hidden-ball condition, before and after the tracking-noise matching of Section 4.4.
 
-**Table 4. Nested leave-one-match-out results on IDSSE**
+**Table 5. Nested leave-one-match-out results on IDSSE**
 
 | Stage | Measure | Unsmoothed matches | Smoothed matches |
 |---|---|---|---|
@@ -188,9 +212,9 @@ The searches on the smoothed matches differ in how settled their results are:
 - **Change detector.** Every fold chose a threshold of 0.3.
 - **Team shape.** Five folds chose a probability of 0.45 and two chose 0.5. Four folds held it for 2 seconds, two for 3 seconds and one for 4 seconds. On all seven matches the setting is 0.45 held for 2 seconds.
 
-Table 5 separates the remaining error by source. It was measured on the smoothed matches with the fixed touch rule, before the change detector and without the team-shape model, using the constants chosen on all seven matches.
+Table 6 separates the remaining error by source. It was measured on the smoothed matches with the fixed touch rule, before the change detector and without the team-shape model, using the constants chosen on all seven matches.
 
-**Table 5. Score with each error source removed, all seven matches**
+**Table 6. Score with each error source removed, all seven matches**
 
 | Condition | spellF1 |
 |---|---|
@@ -215,24 +239,42 @@ The team tested the following alternatives on the unsmoothed matches, before the
 - Three pressure features for each team's most-pressed player were added to the team-shape model: the number of opponents within 5 m, the distance to the nearest opponent, and how fast that distance shrinks. On their own they pick the owner with an AUC of 0.57 to 0.65. In the model they received weights between -0.06 and +0.10, and held-out spellF1 changed by -0.001, better on two of seven matches. Forward position, width and velocity already carry the same information.
 - A two-state hidden Markov model replaced the threshold rule of Section 5.3. Each frame adds the model's log-odds and each change of hands carries one calibrated cost. It matched the threshold rule with one constant instead of two: held-out spellF1 0.532 against 0.531, better on three of seven matches, with folds choosing costs from 0.25 to 1.5. It was not adopted.
 
-Table 6 compares the output on the provided match with norms from the labelled matches. These checks use no labels.
+Table 7 compares the output on the provided match with norms from the labelled matches. These checks use no labels.
 
-**Table 6. Label-free checks on the provided match**
+**Table 7. Label-free checks on the provided match**
 
 | Check | Provided match | IDSSE norm |
 |---|---|---|
-| Dead share | 44.9% | 44.9% |
-| Stoppages per 90 minutes | 105 | 96 |
-| Median stoppage length | 21.4 s | 19.6 s |
-| Possessions per 90 minutes | 258 | 304 |
-| Tagged set pieces inside a detected stoppage | 51 of 58 | Not applicable |
+| Dead share | 51.0% | 44.9% |
+| Stoppages per 90 minutes | 100 | 96 |
+| Median stoppage length | 22.1 s | 19.6 s |
+| Possessions per 90 minutes | 246 | 304 |
+| Tagged set pieces inside a detected stoppage | 52 of 58 | Not applicable |
+
+Without the camera rule the provided match showed a dead share of 44.9%, 105 stoppages and 258 possessions per 90 minutes, and 51 of 58 tagged set pieces. The rule leaves 51.9 minutes of live play in 105.9 graded minutes, in the usual range of effective playing time in elite football.
+
+### 6.1 Broadcast Camera Rule
+
+Table 8 reports the nested test on PFF. Each held-out match uses the rule chosen on the other seven. All other constants are the stored ones, with no refit.
+
+**Table 8. Nested leave-one-match-out results on eight PFF matches**
+
+| Measure | Without the rule | With the rule |
+|---|---|---|
+| spellF1 | 0.417 | 0.454 |
+| macroF1 | 0.659 | 0.777 |
+| Stoppage F1 | 0.465 | 0.660 |
+| Dead share (labels 0.45) | 0.28 | 0.45 |
+
+The rule raises spellF1 on all eight matches by a mean of 0.036 with a standard deviation of 0.015. Every fold chose the same constants. On SkillCorner, 95% of the frames the rule marks are labelled dead, between 93% and 97% per match. On PFF the figure is 92%. The camera is off the pitch on 74% to 78% of labelled dead time and on 6% to 17% of live time across the two sources. On the provided match 76% of the off-pitch time already lies inside the dead ball of rules 1 to 4.
 
 ## 7. Limitations
 
 - **Quick restarts.** Throw-ins and goal kicks taken at full pace are missed when the tracking does not show the ball crossing the line.
-- **Possession count.** The method finds fewer possessions than the labelled matches contain: 258 per 90 minutes on the provided match, against 304 on IDSSE. Changes missed with the ball in view were the largest loss before the change detector.
-- **Dead-ball errors.** Replacing the detected dead ball with the true one adds about 0.10 spellF1 on the labelled matches (Table 5). The dead-ball constants are calibrated on stoppage and frame F1, not on spellF1.
+- **Possession count.** The method finds fewer possessions than the labelled matches contain: 246 per 90 minutes on the provided match, against 304 on IDSSE. Changes missed with the ball in view were the largest loss before the change detector.
+- **Dead-ball errors.** Replacing the detected dead ball with the true one adds about 0.10 spellF1 on the labelled matches (Table 6). The dead-ball constants are calibrated on stoppage and frame F1, not on spellF1.
 - **Control convention.** The ground truth takes the owner the corrected tracking names, with nothing smoothed afterwards. The calibration target passes the DFL owner through the 2-second control filter of Section 4.2, which removes 108 of 412 possessions per 90 minutes on the labelled matches. The challenge text describes such a filter, and the 17 possessions stated for the public five minutes give about 306 per 90 minutes, close to the 304 that remain after it. If the ground truth keeps short possessions instead, removing the filter from the prediction would gain about 0.03 spellF1 on the labelled matches; if it does not, removing it would cost about 0.04. The filter was kept.
+- **Camera rule.** The rule is tested on two broadcast-derived sources whose off-pitch signal is a proxy: estimated players on PFF and few detected players on SkillCorner. On the provided match the signal is the broadcast homography. IDSSE has no broadcast feed and cannot test the rule. Close-ups during live play would be marked dead.
 - **Transfer.** The constants and models come from Bundesliga matches. Their ball loss and tracking wobble are matched to the provided match (Sections 4.3 and 4.4), but differences remain. On the provided match the nearest player is a median 2.15 m from the ball, against 1.57 m on the smoothed labelled matches. Candidates are also fewer: 27 per live minute against 36.
 
 Further work would address these limitations as follows:
@@ -250,7 +292,7 @@ pip install -r anishwar/requirements.txt
 python anishwar/pipeline.py run --name "Més Que Code"
 ```
 
-The second command writes `anishwar/results/Més Que Code.csv`. The build is deterministic and produces an identical file on every run. It requires only the provided data.
+The second command writes `anishwar/results/Més Que Code.csv`. The build is deterministic and produces an identical file on every run. It requires only the provided data, tactical and broadcast.
 
 The IDSSE matches are required only to re-derive the constants:
 
@@ -271,9 +313,21 @@ The nested searches on the smoothed matches ran on a private Kaggle CPU notebook
 
 The commands above give the same results on a single machine.
 
+The broadcast camera rule is reproduced locally from the labelled broadcast sources. The folders are named by environment variables, and nothing derived from them is committed:
+
+```bash
+python -m mtah.broadcast align          # synchronisation and label-free checks on the provided match
+PFF_DIR=... python -m mtah.pff camera   # nested choice of the rule on PFF (after read and smoothing)
+SC_DIR=... python -m mtah.skillcorner   # precision of the rule on SkillCorner
+```
+
+The modules run from the `anishwar/` folder.
+
 ## References
 
 1. IFAB. *Laws of the Game 2025/26*. Law 8: The Start and Restart of Play. Law 9: The Ball In and Out of Play.
 2. Bassek, M., Rein, R., Weber, H. and Memmert, D. (2025). An integrated dataset of spatiotemporal and event data in elite soccer. *Scientific Data* 12, 195. doi:10.1038/s41597-025-04505-y.
 3. Link, D. and Hoernig, M. (2017). Individual ball possession in soccer. *PLOS ONE* 12(7), e0179953. doi:10.1371/journal.pone.0179953.
 4. kloppy. Open-source Python library for football tracking and event data. BSD-3 licence.
+5. PFF FC. *FIFA World Cup 2022 tracking and event data*. Released on request under PFF FC terms of use, without redistribution.
+6. SkillCorner. *Open data*, A-League 2024/25. github.com/SkillCorner/opendata. MIT licence.

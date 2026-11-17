@@ -79,7 +79,7 @@ python anishwar/pipeline.py run
 python evaluation/validate_submission.py "anishwar/results/Més Que Code.csv"
 ```
 
-The build is deterministic. The submitted file has SHA-256 prefix `fd7772e5d0724532`. A fresh clone of the frozen commit reproduces it byte for byte with only the provided data present.
+The build is deterministic. The submitted file has SHA-256 prefix `e829b947f1513dfb` (tag `phase1-submission-r2`). The first version, tag `phase1-submission`, gave `fd7772e5d0724532`. A fresh clone of the frozen commit reproduces it byte for byte with only the provided data present.
 
 ### 5.3 Constants
 
@@ -106,9 +106,9 @@ A release requires all of the following:
 
 ## 6. State of the Method
 
-The submission is the tag `phase1-submission` on `main`. The method has three stages:
+The submission is the tag `phase1-submission-r2` on `main`. The method has three stages:
 
-1. Dead-ball rules from the Laws of the Game and player tempo (`mtah/deadball.py`).
+1. Dead-ball rules from the Laws of the Game and player tempo (`mtah/deadball.py`), plus stretches of at least 8 s with the broadcast camera off the pitch (`mtah/broadcast.py`).
 2. A learned change detector judges candidate changes of possession with the ball in view (`mtah/changes.py`).
 3. A team-shape model decides possession inside gaps in the ball tracking (`mtah/shape.py`, rule 6 in `mtah/possession.py`).
 
@@ -163,6 +163,7 @@ Each direction below was tested by nested leave-one-match-out on IDSSE. A direct
 | Random offset between ball and players | Not tried | Rejected as a poor generalisation |
 | Stoppage edges and lone ball-out length chosen on spellF1 | Below the paired test when every stage was nested | Rejected |
 | Touch radius searched up to 4.5 m | No gain when every stage was nested | Rejected |
+| Broadcast camera off the pitch for 8 s marks dead | Not testable on IDSSE. PFF nested: +0.036, 8 of 8. SkillCorner precision 0.95 | Adopted in `phase1-submission-r2` |
 
 ## 9. Open Directions
 
@@ -215,6 +216,9 @@ Agents economise on context and compute as follows:
 | `mtah/calibrate.py` | IDSSE cues, smoothing, ball hiding and the dead-ball search |
 | `mtah/poss_calibrate.py` | Possession and change-detector calibration |
 | `mtah/smoothing.py` | Smoothing fit on tracking wobble |
+| `mtah/broadcast.py` | Broadcast synchronisation and the camera-off-the-pitch rule |
+| `mtah/pff.py` | PFF FC World Cup 2022 test and the nested choice of the camera rule. Local only: PFF terms forbid redistribution |
+| `mtah/skillcorner.py` | Precision of the camera rule on SkillCorner open data |
 | `mtah/submit.py` | Submission build |
 | `offload/` | Fixed-point script, bundle builder and notebook for external compute |
 | `Més Que Code.md` | Technical document for the organisers |

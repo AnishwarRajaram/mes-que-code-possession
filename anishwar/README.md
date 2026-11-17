@@ -55,6 +55,14 @@ python anishwar/pipeline.py challenger      # logistic challenger under the same
 
 Before scoring, the IDSSE tracking is adjusted to resemble the provided tracking. Its tracks are smoothed until their frame-to-frame wobble matches. Its ball is hidden in the pattern measured on the provided tracking: long gaps, more often while players are slow. Both adjustments are measured on the provided tracking alone, without labels. Each command runs single-threaded by default. The option `--workers N` searches N folds side by side with an identical result.
 
+The broadcast camera rule is chosen on PFF FC World Cup 2022 (request-gated, no redistribution, processed locally only) and checked on SkillCorner open data (MIT licence, credit SkillCorner). Their folders are named by the environment variables `PFF_DIR` and `SC_DIR`. Run from the `anishwar/` folder:
+
+```bash
+python -m mtah.broadcast align                  # broadcast synchronisation, label-free checks
+python -m mtah.pff read                         # then smoothing, sanity, camera, breakdown
+python -m mtah.skillcorner                      # precision of the camera rule
+```
+
 The nested searches ran once on a private cloud CPU notebook. The folder `offload/` holds the scripts and the notebook. Section 8 of the technical document describes how the results were verified locally.
 
 ## 5. Outputs

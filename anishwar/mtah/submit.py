@@ -1,6 +1,7 @@
 """Builds the submission file for the provided game from the tracking alone.
 
-    cues (deadball.build_cues) -> dead ball (deadball.detect) -> candidate changes judged by the
+    cues (deadball.build_cues) -> dead ball (deadball.detect, then broadcast.apply: stretches of at
+    least 8 s with the broadcast camera off the pitch) -> candidate changes judged by the
     change model (changes.MODEL, THRESH) -> players' shape inside ball gaps (shape.MODEL) ->
     possession again with rule 6 (possession.SHAPE)
 
@@ -15,12 +16,12 @@ import os
 
 import numpy as np
 
-from . import calibrate, changes, config, deadball, harness, possession, shape
+from . import broadcast, calibrate, changes, config, deadball, harness, possession, shape
 
 
 def codes():
     cues, graded = calibrate.our_cues()
-    dead = deadball.detect(cues)
+    dead = broadcast.apply(deadball.detect(cues), cues)
     frames, teams, X = changes.candidates(cues, possession.ball_motion(cues))
     p = changes.prob(changes.MODEL, X)
     first = changes.label(cues, dead, frames, teams, p, changes.THRESH)
