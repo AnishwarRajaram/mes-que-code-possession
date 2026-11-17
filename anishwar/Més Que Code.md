@@ -1,14 +1,14 @@
 # Ball Possession from Automatic Tracking
 
 **More than a Hack 2027, Phase 1: Technical Document**
-**Team:** Mes Que Code
+**Team:** Més Que Code
 **Organisers:** Metrica Sports, FC Barcelona Innovation Hub, Mobile World Capital Barcelona
 
 ---
 
 ## 1. Introduction
 
-This document describes the method that produced the submission file `Mes Que Code.csv`. The method labels every graded frame of the provided match as home possession, away possession or dead ball. Its only input is the automatic tactical tracking.
+This document describes the method that produced the submission file `Més Que Code.csv`. The method labels every graded frame of the provided match as home possession, away possession or dead ball. Its only input is the automatic tactical tracking.
 
 The method has three stages:
 
@@ -247,10 +247,10 @@ The environment uses Python 3.12.8, numpy 1.26.3, pandas 2.1.4 and kloppy 3.19.1
 
 ```bash
 pip install -r anishwar/requirements.txt
-python anishwar/pipeline.py run --name "Mes Que Code"
+python anishwar/pipeline.py run --name "Més Que Code"
 ```
 
-The second command writes `anishwar/results/Mes Que Code.csv`. The build is deterministic and produces an identical file on every run. It requires only the provided data.
+The second command writes `anishwar/results/Més Que Code.csv`. The build is deterministic and produces an identical file on every run. It requires only the provided data.
 
 The IDSSE matches are required only to re-derive the constants:
 

@@ -277,7 +277,7 @@ def main():
     commands.add_parser("deadcheck", help="dead-ball rules on the provided game, label-free") \
         .set_defaults(run=deadcheck)
     run_cmd = commands.add_parser("run", help="build the submission file from the tracking")
-    run_cmd.add_argument("--name", default="Mes Que Code", help="file name, without .csv")
+    run_cmd.add_argument("--name", default="Més Que Code", help="file name, without .csv")
     run_cmd.set_defaults(run=run)
     eval_cmd = commands.add_parser("eval", help="correctness check on the public window")
     eval_cmd.add_argument("csv", nargs="+", help="submission CSVs")

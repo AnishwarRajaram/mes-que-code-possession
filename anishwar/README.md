@@ -1,6 +1,6 @@
-# Mes Que Code: Possession Pipeline
+# Més Que Code: Possession Pipeline
 
-This folder holds the pipeline of team Mes Que Code for More than a Hack 2027, Phase 1. The pipeline builds the submission file from the automatic tactical tracking. The calibration on other matches sets its constants. The technical document [Mes Que Code.md](Mes%20Que%20Code.md) describes the method. The guide [AGENTS.md](AGENTS.md) describes how the work is conducted and reproduced.
+This folder holds the pipeline of team Més Que Code for More than a Hack 2027, Phase 1. The pipeline builds the submission file from the automatic tactical tracking. The calibration on other matches sets its constants. The technical document [Més Que Code.md](M%C3%A9s%20Que%20Code.md) describes the method. The guide [AGENTS.md](AGENTS.md) describes how the work is conducted and reproduced.
 
 ## 1. Rules Observed
 
@@ -30,11 +30,11 @@ python anishwar/pipeline.py cache           # parse the tactical tracking and ta
 python anishwar/pipeline.py features        # per-frame features and a full-match summary
 python anishwar/pipeline.py census CSV...   # label-free plausibility checks
 python anishwar/pipeline.py deadcheck       # dead-ball rules on the provided match, label-free
-python anishwar/pipeline.py run             # build the submission, results/Mes Que Code.csv
+python anishwar/pipeline.py run             # build the submission, results/Més Que Code.csv
 python anishwar/pipeline.py eval CSV...     # correctness check on the public window
 ```
 
-The build is deterministic. It requires only the provided data and writes `anishwar/results/Mes Que Code.csv`.
+The build is deterministic. It requires only the provided data and writes `anishwar/results/Més Que Code.csv`.
 
 ## 4. Data from Other Matches
 

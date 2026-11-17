@@ -1,7 +1,7 @@
 # Operating Guide for Agents and Reviewers
 
 **Project:** Ball possession from automatic tracking, More than a Hack 2027, Phase 1
-**Team:** Mes Que Code
+**Team:** Més Que Code
 **Scope:** The `anishwar/` workspace of this repository
 
 ---
@@ -10,7 +10,7 @@
 
 This guide transfers the working state of the project to a new agent or reviewer. It records the rules that bind every contributor, the procedure that reproduces the submission, the state of the method, the directions already explored and the procedure for further work. A new agent reads this guide in full before it reads code or runs a command.
 
-The technical document `Mes Que Code.md` describes the method for the organisers. This guide describes how the work is conducted.
+The technical document `Més Que Code.md` describes the method for the organisers. This guide describes how the work is conducted.
 
 ## 2. Authority
 
@@ -76,7 +76,7 @@ export OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 
 ```bash
 python anishwar/pipeline.py run
-python evaluation/validate_submission.py "anishwar/results/Mes Que Code.csv"
+python evaluation/validate_submission.py "anishwar/results/Més Que Code.csv"
 ```
 
 The build is deterministic. The submitted file has SHA-256 prefix `fd7772e5d0724532`. A fresh clone of the frozen commit reproduces it byte for byte with only the provided data present.
@@ -217,5 +217,5 @@ Agents economise on context and compute as follows:
 | `mtah/smoothing.py` | Smoothing fit on tracking wobble |
 | `mtah/submit.py` | Submission build |
 | `offload/` | Fixed-point script, bundle builder and notebook for external compute |
-| `Mes Que Code.md` | Technical document for the organisers |
+| `Més Que Code.md` | Technical document for the organisers |
 | `AGENTS.md` | This guide |
